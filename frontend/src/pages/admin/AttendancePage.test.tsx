@@ -147,7 +147,8 @@ describe('the attendance report', () => {
     const signIn = screen.getByLabelText('Sign in') as HTMLInputElement;
     expect(signIn.value).toBe('2026-10-20T08:30');
 
-    await user.type(screen.getByLabelText('Reason'), 'Approved late arrival by the floor manager');
+    await user.click(screen.getByLabelText('Reason'));
+    await user.paste('Approved late arrival by the floor manager');
     await user.click(screen.getByRole('button', { name: 'Save the correction' }));
 
     await waitFor(() => {
@@ -186,7 +187,8 @@ describe('the attendance report', () => {
     await renderPage();
     await user.click(screen.getByRole('button', { name: 'Records' }));
     await user.click(await screen.findByRole('button', { name: 'Correct' }));
-    await user.type(screen.getByLabelText('Reason'), 'Approved late arrival by the floor manager');
+    await user.click(screen.getByLabelText('Reason'));
+    await user.paste('Approved late arrival by the floor manager');
     await user.click(screen.getByRole('button', { name: 'Save the correction' }));
 
     expect(await screen.findByText(/conflicts with the current state/)).toBeInTheDocument();

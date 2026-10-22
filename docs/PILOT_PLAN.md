@@ -54,7 +54,7 @@ tracked in [`DEPLOYMENT_CHECKLIST.md`](DEPLOYMENT_CHECKLIST.md).
 | Production deployment is live on HTTPS with the real domain | checklist 1.6, 1.9, 3.3 | ADESA IT |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ALLOWED_ORIGINS` match the deployed domain | checklist 1.7: a real passkey registration succeeds | ADESA IT |
 | Architecture is `prod` with enforcement **on** and the office allowlist configured | checklist 2.8, 2.9, 2.13 | ADESA IT |
-| Resolved client address confirmed from ADESA HQ Wi-Fi as `105.127.6.174` | checklist 2.10 (diagnostics endpoint) | ADESA IT |
+| Resolved client address confirmed from ADESA HQ Wi-Fi and matched to the verified office egress | checklist 2.10 (authenticated diagnostics endpoint) | ADESA IT |
 | Sign-in **and** sign-out refused from a mobile hotspot | checklist 2.11 | ADESA IT |
 | Edge firewall / WAF restriction in place as the second layer | checklist 3.1–3.4 | ADESA IT |
 | Backup taken **and a restore rehearsed** on the production database | checklist 1.8 | ADESA IT |

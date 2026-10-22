@@ -19,11 +19,11 @@ pilot). Pair with [`DEPLOYMENT_CHECKLIST.md`](DEPLOYMENT_CHECKLIST.md) and
 
 | Component | What it is | Where the evidence lives |
 |---|---|---|
-| Backend | Spring Boot REST API, server-side sessions, WebAuthn, office-network guard | application log, `logs/security.log` |
+| Backend | Spring Boot REST API, server-side sessions, WebAuthn, office-network guard | application stdout, security stderr in production |
 | Database | PostgreSQL; employees, attendance, devices, corrections, audit | `attendance_records`, `audit_logs`, `attendance_corrections` |
-| Frontend | React SPA served from the same origin as the API | browser |
+| Frontend | React SPA on Vercel; exact-origin credentialed CORS to Render | browser |
 | Edge | HTTPS termination, WAF/firewall, SPA fallback | provider console |
-| Security log | Restricted file with refused attendance attempts (client IP, reason) | `SECURITY_LOG_FILE` (IT-only) |
+| Security log | Dedicated stream with refused attendance attempts (client IP, reason) | Render stderr (production); `SECURITY_LOG_FILE` (non-production) |
 
 Health check: `GET /actuator/health` → `{"status":"UP"}`.
 
@@ -51,9 +51,10 @@ Escalate to L3/security **immediately** (do not wait for the daily review) for:
 Every workday, ADESA IT (or the named support person):
 
 1. `GET /actuator/health` returns `UP`.
-2. Review new `event=attendance_denied` lines in the security log. Expected:
-   refusals from known non-office addresses. Unexpected: a refusal from
-   `105.127.6.174` (the office) — escalate, the allowlist or topology changed.
+2. Review new `event=attendance_denied` lines in the security stream. Expected:
+   refusals from known non-office addresses. Unexpected: a refusal from the
+   currently verified office egress address — escalate, the allowlist or
+   topology may have changed.
 3. ADMIN checks the audit trail for the previous day: account changes, device
    approvals/revocations/replacements, corrections, reactivations.
 4. HR reconciles the attendance report against the manual register (pilot).
@@ -138,12 +139,13 @@ UI: **Employees → Reactivate** (shown for inactive accounts).
 
 ### 4.9 Recover when the only administrator is inactive
 
-The bootstrap runs when **no active ADMIN exists**. Start the application once
-with the four `ADESA_BOOTSTRAP_ADMIN_*` variables set (see README, "Creating the
-first administrator"), then **unset them immediately** and change the password
-after the first sign-in.
+First-admin bootstrap is not a recovery endpoint. Any existing ADMIN (active or
+inactive), or prior FIRST_ADMIN_BOOTSTRAPPED audit event, prevents repeat
+provisioning. Never leave bootstrap variables configured for routine restarts.
 
-This is the only sanctioned recovery path. Do not update the database directly.
+Use another authorized administrator to reactivate the account. If none is
+available, escalate to the owner for a separately reviewed recovery procedure;
+do not delete audit records or rerun bootstrap as a shortcut.
 
 ## 5. Incident procedures
 
@@ -163,8 +165,8 @@ Never ask for the employee's password.
 ### 5.2 A sign-in was refused from the office
 
 1. Check the security log line: `action`, `reason`, `client_ip`.
-2. If `client_ip` is not `105.127.6.174`, the topology changed (new ISP address,
-   proxy, VPN) — this is a network change, not an employee error.
+2. Compare `client_ip` with the office egress address currently confirmed by
+   ADESA IT; do not assume a previously observed IP is what Render sees.
 3. If a proxy was introduced, add its confirmed address to
    `ATTENDANCE_TRUSTED_PROXY_ADDRESSES`, verify with the diagnostics endpoint
    (`GET /api/v1/admin/network/client-address`) **from the office**, then

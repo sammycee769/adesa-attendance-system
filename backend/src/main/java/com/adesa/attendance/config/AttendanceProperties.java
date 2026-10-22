@@ -16,7 +16,7 @@ import jakarta.validation.constraints.NotBlank;
  *
  * <pre>
  * attendance.network.enforcement-enabled = ${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
- * attendance.network.allowed-ipv4       = ${ATTENDANCE_ALLOWED_IPV4:105.127.6.174/32}
+ * attendance.network.allowed-ipv4       = ${ATTENDANCE_ALLOWED_IPV4:}
  * attendance.network.trusted-proxies    = ${ATTENDANCE_TRUSTED_PROXY_ADDRESSES:}
  * </pre>
  *

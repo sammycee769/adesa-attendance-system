@@ -282,7 +282,8 @@ class AuthControllerTest {
 
         MvcResult csrfResult = mockMvc.perform(get("/api/v1/auth/csrf")
                         .with(restoreRealCsrfTokenRepository()))
-                .andExpect(status().isNoContent())
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andReturn();
 
         // The SPA reads this non-HttpOnly cookie and echoes it as a header, so
@@ -293,6 +294,8 @@ class AuthControllerTest {
                 .as("the SPA must be able to read the CSRF cookie")
                 .isFalse();
         String xsrf = xsrfCookie.getValue();
+        assertThat(objectMapper.readTree(csrfResult.getResponse().getContentAsString()).get("token").asText())
+                .isEqualTo(xsrf);
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .cookie(xsrfCookie)
@@ -317,7 +320,7 @@ class AuthControllerTest {
     @DisplayName("API responses carry the defensive security headers")
     void securityHeadersArePresent() throws Exception {
         mockMvc.perform(get("/api/v1/auth/csrf").with(restoreRealCsrfTokenRepository()))
-                .andExpect(status().isNoContent())
+                .andExpect(status().isOk())
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string("X-Frame-Options", "DENY"))
                 .andExpect(header().string("Referrer-Policy", "same-origin"))

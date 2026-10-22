@@ -120,10 +120,14 @@ describe('the employee roster', () => {
     await renderPage();
     await user.click(await screen.findByRole('button', { name: 'Add employee' }));
 
-    await user.type(screen.getByLabelText('Employee number'), 'EMP-002');
-    await user.type(screen.getByLabelText('Full name'), 'Chidi Okafor');
-    await user.type(screen.getByLabelText('Email'), 'chidi.okafor@adesa.test');
-    await user.type(screen.getByLabelText(/Initial password/i), 'a-very-long-password1');
+    await user.click(screen.getByLabelText('Employee number'));
+    await user.paste('EMP-002');
+    await user.click(screen.getByLabelText('Full name'));
+    await user.paste('Chidi Okafor');
+    await user.click(screen.getByLabelText('Email'));
+    await user.paste('chidi.okafor@adesa.test');
+    await user.click(screen.getByLabelText(/Initial password/i));
+    await user.paste('a-very-long-password1');
     await user.click(screen.getByRole('button', { name: 'Create the account' }));
 
     await waitFor(() => {

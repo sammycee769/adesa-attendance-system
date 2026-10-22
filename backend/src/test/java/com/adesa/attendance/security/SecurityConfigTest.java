@@ -27,7 +27,7 @@ class SecurityConfigTest {
 
     @Test
     void csrfCookieIsSecureAndSameSiteLaxWhenTheSessionCookieIsSecure() {
-        Cookie cookie = save(config.csrfTokenRepository(true));
+        Cookie cookie = save(config.csrfTokenRepository(true, "Lax"));
 
         assertThat(cookie).isNotNull();
         assertThat(cookie.getName()).isEqualTo("XSRF-TOKEN");
@@ -38,12 +38,42 @@ class SecurityConfigTest {
 
     @Test
     void csrfCookieStaysUsableOverPlainHttpInLocalDevelopment() {
-        Cookie cookie = save(config.csrfTokenRepository(false));
+        Cookie cookie = save(config.csrfTokenRepository(false, "Lax"));
 
         assertThat(cookie).isNotNull();
         assertThat(cookie.getName()).isEqualTo("XSRF-TOKEN");
         assertThat(cookie.getSecure()).isFalse();
         assertThat(cookie.getAttribute("SameSite")).isEqualTo("Lax");
+    }
+
+    @Test
+    void crossSiteCsrfCookieIsSecureAndSameSiteNone() {
+        Cookie cookie = save(config.csrfTokenRepository(true, "None"));
+        assertThat(cookie.getSecure()).isTrue();
+        assertThat(cookie.getAttribute("SameSite")).isEqualTo("None");
+    }
+
+    @Test
+    void corsAllowsOnlyTheConfiguredFrontendAndRequiredHeaders() throws Exception {
+        var account = new com.adesa.attendance.config.AccountProperties();
+        account.setPublicUrl("https://attendance.example.com");
+        var filter = new org.springframework.web.filter.CorsFilter(config.corsConfigurationSource(account));
+        for (String origin : java.util.List.of("https://attendance.example.com", "https://attacker.example")) {
+            var request = new MockHttpServletRequest("OPTIONS", "/api/v1/auth/login");
+            request.setServletPath("/api/v1/auth/login");
+            request.addHeader("Origin", origin);
+            request.addHeader("Access-Control-Request-Method", "POST");
+            request.addHeader("Access-Control-Request-Headers", "content-type,x-xsrf-token");
+            var response = new MockHttpServletResponse();
+            filter.doFilter(request, response, new org.springframework.mock.web.MockFilterChain());
+            if (origin.equals(account.getPublicUrl())) {
+                assertThat(response.getHeader("Access-Control-Allow-Origin")).isEqualTo(origin);
+                assertThat(response.getHeader("Access-Control-Allow-Credentials")).isEqualTo("true");
+            } else {
+                assertThat(response.getStatus()).isEqualTo(403);
+                assertThat(response.getHeader("Access-Control-Allow-Origin")).isNull();
+            }
+        }
     }
 
     private Cookie save(CookieCsrfTokenRepository repository) {

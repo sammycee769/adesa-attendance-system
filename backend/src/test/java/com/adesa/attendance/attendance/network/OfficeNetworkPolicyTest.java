@@ -78,14 +78,13 @@ class OfficeNetworkPolicyTest {
     }
 
     @Test
-    void theOfficePublicAddressIsTheOnlyApprovedAddress() {
-        // The approved office network is the ADESA HQ public address as supplied
-        // by ADESA. Private and link-local addresses are deliberately not on it.
-        OfficeNetworkPolicy policy = policy(true, List.of("105.127.6.174/32"));
+    void onlyConfiguredTestAddressIsApproved() {
+        // TEST-NET-2 is reserved for documentation and is not an office egress.
+        OfficeNetworkPolicy policy = policy(true, List.of("198.51.100.174/32"));
 
-        assertThat(policy.isWithinApprovedNetwork(address("105.127.6.174"))).isTrue();
-        assertThat(policy.isWithinApprovedNetwork(address("105.127.6.173"))).isFalse();
-        assertThat(policy.isWithinApprovedNetwork(address("105.127.6.175"))).isFalse();
+        assertThat(policy.isWithinApprovedNetwork(address("198.51.100.174"))).isTrue();
+        assertThat(policy.isWithinApprovedNetwork(address("198.51.100.173"))).isFalse();
+        assertThat(policy.isWithinApprovedNetwork(address("198.51.100.175"))).isFalse();
         assertThat(policy.isWithinApprovedNetwork(address("192.168.3.170"))).isFalse();
         assertThat(policy.isWithinApprovedNetwork(address("fe80::1"))).isFalse();
         assertThat(policy.approvedNetworkCount()).isEqualTo(1);
@@ -128,7 +127,7 @@ class OfficeNetworkPolicyTest {
 
     @Test
     void aNativeIpv6ClientIsNeverApproved() {
-        OfficeNetworkPolicy policy = policy(true, List.of("105.127.6.174/32"));
+        OfficeNetworkPolicy policy = policy(true, List.of("198.51.100.174/32"));
 
         assertThat(policy.isWithinApprovedNetwork(address("2001:db8::1"))).isFalse();
         assertThat(policy.isWithinApprovedNetwork(address("fe80::1"))).isFalse();
@@ -136,11 +135,10 @@ class OfficeNetworkPolicyTest {
 
     @Test
     void anIpv4MappedIpv6ClientIsTreatedAsItsIpv4Address() {
-        // ::ffff:105.127.6.174 is the same host as 105.127.6.174 on a
-        // dual-stack socket, so it is normalised and approved.
-        OfficeNetworkPolicy policy = policy(true, List.of("105.127.6.174/32"));
+        // The mapped test address is normalised and approved.
+        OfficeNetworkPolicy policy = policy(true, List.of("198.51.100.174/32"));
 
-        assertThat(policy.isWithinApprovedNetwork(address("::ffff:105.127.6.174"))).isTrue();
+        assertThat(policy.isWithinApprovedNetwork(address("::ffff:198.51.100.174"))).isTrue();
     }
 
     @Test

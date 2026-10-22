@@ -333,8 +333,8 @@ class AdminAttendanceApiTest {
     }
 
     @Test
-    @DisplayName("The CSV export returns a downloadable file with a header row")
-    void exportReturnsCsv() throws Exception {
+    @DisplayName("The PDF export returns a downloadable PDF")
+    void exportReturnsPdf() throws Exception {
         UUID employeeId = createEmployee("RPT-007", "Gita Mensah", "gita.mensah@adesa.test", EmployeeRole.EMPLOYEE);
         createRecord(employeeId, LocalDate.of(2026, 3, 9), Instant.parse("2026-03-09T08:00:00Z"), null);
 
@@ -351,6 +351,24 @@ class AdminAttendanceApiTest {
         byte[] pdf = result.getResponse().getContentAsByteArray();
         // A PDF always starts with the %PDF- signature.
         assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+    }
+
+    @Test
+    void csvExportIsAuthorizedAndContainsAttendanceRows() throws Exception {
+        UUID employeeId = createEmployee("CSV-001", "CSV Employee", "csv@adesa.test", EmployeeRole.EMPLOYEE);
+        createRecord(employeeId, LocalDate.of(2026, 3, 9), Instant.parse("2026-03-09T08:00:00Z"), null);
+        mockMvc.perform(get("/api/v1/admin/attendance/export.csv"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/admin/attendance/export.csv")
+                        .with(authentication(asRole(EmployeeRole.EMPLOYEE))))
+                .andExpect(status().isForbidden());
+        var response = mockMvc.perform(get("/api/v1/admin/attendance/export.csv")
+                        .with(authentication(asHr())))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andReturn().getResponse();
+        assertThat(response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                .contains("Employee number,Employee name", "CSV-001", "CSV Employee");
     }
 
     @Test

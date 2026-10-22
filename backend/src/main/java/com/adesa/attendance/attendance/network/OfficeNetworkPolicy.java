@@ -20,8 +20,8 @@ import inet.ipaddr.IPAddress;
  * <p>The allowlist is <strong>IPv4-only</strong>. A request whose resolved
  * client address is a native IPv6 address is never approved, so IPv6 traffic
  * cannot be used to bypass the IPv4 policy. (An IPv4-mapped IPv6 peer such as
- * {@code ::ffff:105.127.6.174} is the same IPv4 host and is normalised to IPv4
- * before the check.)
+ * {@code ::ffff:198.51.100.174} is the same IPv4 test host and is normalised
+ * to IPv4 before the check.)
  */
 @Component
 public class OfficeNetworkPolicy {

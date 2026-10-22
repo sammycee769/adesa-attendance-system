@@ -114,13 +114,20 @@ public class ProductionSafetyValidator implements InitializingBean {
         }
         if (!"https".equalsIgnoreCase(uri.getScheme())) {
             throw new IllegalStateException(
-                    "Refusing to start: APP_PUBLIC_URL must use https in production, got '"
-                            + publicUrl + "'. A plain-HTTP link would expose the single-use token.");
+                    "Refusing to start: APP_PUBLIC_URL must use https in production. A plain-HTTP link "
+                            + "would expose the single-use token.");
         }
         String host = uri.getHost();
         if (host == null) {
             throw new IllegalStateException(
-                    "Refusing to start: APP_PUBLIC_URL has no host: '" + publicUrl + "'.");
+                    "Refusing to start: APP_PUBLIC_URL has no host.");
+        }
+        String path = uri.getRawPath();
+        if (uri.getUserInfo() != null || uri.getRawQuery() != null || uri.getRawFragment() != null
+                || (StringUtils.hasText(path) && !"/".equals(path))) {
+            throw new IllegalStateException(
+                    "Refusing to start: APP_PUBLIC_URL must be a plain origin without user information, "
+                            + "a path, query, or fragment.");
         }
         // It must be a real deployed origin, not a development placeholder.
         String normalizedHost = host.toLowerCase(Locale.ROOT);
@@ -132,8 +139,7 @@ public class ProductionSafetyValidator implements InitializingBean {
         }
         // And it must belong to the same domain as the WebAuthn RP ID.
         String rpId = webAuthnProperties.getRpId().trim().toLowerCase(Locale.ROOT);
-        if (!normalizedHost.equals(rpId) && !normalizedHost.endsWith("." + rpId)
-                && !rpId.endsWith("." + normalizedHost)) {
+        if (!normalizedHost.equals(rpId) && !normalizedHost.endsWith("." + rpId)) {
             throw new IllegalStateException(
                     "Refusing to start: APP_PUBLIC_URL host '" + host
                             + "' does not match the WebAuthn RP ID '" + rpId + "'. The account links "
@@ -147,18 +153,41 @@ public class ProductionSafetyValidator implements InitializingBean {
      * employees. Credentials must be present too.
      */
     private void validateMail() {
+        if (mailProperties.getProvider() == MailProperties.Provider.ZOHO_API) {
+            if (!mailProperties.isConfigured()) {
+                throw new IllegalStateException("Refusing to start: Zoho Mail API requires MAIL_FROM, "
+                        + "ZOHO_DATA_CENTER, a numeric ZOHO_MAIL_ACCOUNT_ID, ZOHO_CLIENT_ID, "
+                        + "ZOHO_CLIENT_SECRET and ZOHO_REFRESH_TOKEN. Supply OAuth credentials "
+                        + "privately in Render; do not use the SMTP password as an API token.");
+            }
+            return;
+        }
         if (!mailProperties.isConfigured()) {
             throw new IllegalStateException(
                     "Refusing to start: the 'prod' profile is active but mail delivery is not "
                             + "configured. Set MAIL_HOST and MAIL_FROM (and MAIL_USERNAME/MAIL_PASSWORD "
                             + "for Zoho) so account-setup and password-recovery e-mail can be sent.");
         }
-        if (mailProperties.isSmtpAuth()
-                && (!StringUtils.hasText(mailProperties.getUsername())
-                    || !StringUtils.hasText(mailProperties.getPassword()))) {
+        if (!mailProperties.isSmtpAuth()) {
+            throw new IllegalStateException(
+                    "Refusing to start: MAIL_SMTP_AUTH must be true for production SMTP delivery.");
+        }
+        if (!StringUtils.hasText(mailProperties.getUsername())
+                || !StringUtils.hasText(mailProperties.getPassword())) {
             throw new IllegalStateException(
                     "Refusing to start: MAIL_SMTP_AUTH is true but MAIL_USERNAME or MAIL_PASSWORD is "
                             + "unset. Supply the Zoho mailbox credentials through the environment.");
+        }
+        if (mailProperties.isSslEnable() == mailProperties.isStarttlsEnable()) {
+            throw new IllegalStateException(
+                    "Refusing to start: production mail must enable exactly one of "
+                            + "MAIL_SMTP_SSL_ENABLE or MAIL_SMTP_STARTTLS_ENABLE.");
+        }
+        if ((mailProperties.isSslEnable() && mailProperties.getPort() != 465)
+                || (mailProperties.isStarttlsEnable() && mailProperties.getPort() != 587)) {
+            throw new IllegalStateException(
+                    "Refusing to start: production SMTP must use port 465 for implicit SSL or port 587 "
+                            + "for STARTTLS.");
         }
     }
 

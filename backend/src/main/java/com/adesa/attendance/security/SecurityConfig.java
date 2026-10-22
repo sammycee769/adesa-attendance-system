@@ -1,6 +1,11 @@
 package com.adesa.attendance.security;
 
 import com.adesa.attendance.config.AuthProperties;
+import com.adesa.attendance.config.AccountProperties;
+import java.util.List;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.adesa.attendance.employee.EmployeeRepository;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -44,7 +49,8 @@ public class SecurityConfig {
      */
     @Bean
     CookieCsrfTokenRepository csrfTokenRepository(
-            @Value("${server.servlet.session.cookie.secure:false}") boolean cookieSecure) {
+            @Value("${server.servlet.session.cookie.secure:false}") boolean cookieSecure,
+            @Value("${server.servlet.session.cookie.same-site:lax}") String sameSite) {
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         // The repository otherwise derives `Secure` from request.isSecure(),
         // which is false behind a TLS-terminating reverse proxy because
@@ -52,7 +58,7 @@ public class SecurityConfig {
         // cookie setting instead so the JS-readable token is Secure in prod.
         repository.setCookieCustomizer(builder -> builder
                 .secure(cookieSecure)
-                .sameSite("Lax"));
+                .sameSite(sameSite));
         return repository;
     }
 
@@ -75,6 +81,7 @@ public class SecurityConfig {
                 new PasswordChangeRequiredFilter(employeeRepository, securityErrorWriter);
 
         http
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
@@ -143,6 +150,21 @@ public class SecurityConfig {
                 .addFilterAfter(credentialsVersionFilter, SecurityContextHolderFilter.class)
                 .addFilterAfter(passwordChangeRequiredFilter, CredentialsVersionFilter.class);
         return http.build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(AccountProperties accountProperties) {
+        CorsConfiguration cors = new CorsConfiguration();
+        // One exact frontend origin; no wildcard or deployment-preview domains.
+        String origin = accountProperties.getPublicUrl().replaceAll("/+$", "");
+        cors.setAllowedOrigins(List.of(origin));
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        cors.setAllowedHeaders(List.of("Accept", "Content-Type", "X-XSRF-TOKEN"));
+        cors.setAllowCredentials(true);
+        cors.setMaxAge(600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", cors);
+        return source;
     }
 
     @Bean

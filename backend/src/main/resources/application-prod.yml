@@ -11,9 +11,15 @@
 
 spring:
   datasource:
-    # No default: production must supply a unique secret. A missing value is a
-    # startup error, never a fallback to the development password.
+    # No development connection defaults in production. The URL should use the
+    # Supabase direct or session-pooler JDBC endpoint selected for this service.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      # Supabase PostgreSQL connections must use TLS.
+      data-source-properties:
+        sslmode: require
 
 server:
   # Keep NONE so the office-network policy stays in control of client-IP
@@ -24,6 +30,9 @@ server:
       cookie:
         # HTTPS is mandatory in production, so the session cookie is Secure.
         secure: true
+        # Required for separate vercel.app / onrender.com sites. Browsers may
+        # still block third-party cookies; prefer sibling custom domains.
+        same-site: ${SESSION_COOKIE_SAME_SITE:none}
 
 attendance:
   network:
@@ -34,7 +43,14 @@ attendance:
     # without the office-network restriction.
     enforcement-enabled: ${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
     # The local-development bypass must never be on in production.
-    local-development-bypass: false
+    local-development-bypass: ${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}
+    # No production office IP is assumed. This must be supplied after the
+    # actual client path has been verified.
+    allowed-ipv4: ${ATTENDANCE_ALLOWED_IPV4}
+    # Forwarded headers remain untrusted unless Render's actual proxy path is
+    # verified and its stable peer address is explicitly configured.
+    trusted-proxies: ${ATTENDANCE_TRUSTED_PROXY_ADDRESSES:}
+    client-ip-header: ${ATTENDANCE_CLIENT_IP_HEADER:X-Forwarded-For}
 
 webauthn:
   # Production requires biometric/PIN verification for the passkey ceremony.
@@ -49,9 +65,9 @@ adesa:
     # recovery links can never point at localhost or an attacker-controlled host.
     public-url: ${APP_PUBLIC_URL}
   mail:
-    # E-mail delivery is required in production: the validator refuses to start
-    # without a real SMTP host so the setup/recovery flows cannot silently fail.
-    host: ${MAIL_HOST}
+    # E-mail delivery is required. SMTP needs a host; zoho-api needs OAuth
+    # configuration instead. The validator checks the selected transport.
+    host: ${MAIL_HOST:}
     from: ${MAIL_FROM}
 
 management:

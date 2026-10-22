@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>,
         JpaSpecificationExecutor<AuditLog> {
+
+    boolean existsByAction(AuditAction action);
 }

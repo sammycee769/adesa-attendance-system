@@ -114,7 +114,7 @@ describe('attendance dashboard', () => {
     await renderDashboard();
 
     const identity = screen.getByRole('region', { name: 'Today at ADESA HQ' });
-    expect(within(identity).getByText('AD-0001')).toBeInTheDocument();
+    expect(await within(identity).findByText('AD-0001')).toBeInTheDocument();
     expect(within(identity).getByText('Ada Okafor')).toBeInTheDocument();
     expect(within(identity).getByText(/2026/)).toBeInTheDocument();
 

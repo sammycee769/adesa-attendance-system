@@ -1,6 +1,7 @@
 package com.adesa.attendance.attendance.network;
 
 import java.util.List;
+import java.util.Collections;
 
 import com.adesa.attendance.config.AttendanceProperties;
 
@@ -48,11 +49,11 @@ public class ClientIpResolver {
             // Untrusted source: ignore any client-supplied forwarding headers.
             return directPeer;
         }
-        String forwardedHeader = request.getHeader(clientIpHeader);
+        String forwardedHeader = String.join(",", Collections.list(request.getHeaders(clientIpHeader)));
         if (!StringUtils.hasText(forwardedHeader)) {
             return directPeer;
         }
-        String[] hops = forwardedHeader.split(",");
+        String[] hops = forwardedHeader.split(",", -1);
         for (int i = hops.length - 1; i >= 0; i--) {
             IPAddress hop = NetworkAddresses.parseOrNull(hops[i]);
             if (hop == null) {

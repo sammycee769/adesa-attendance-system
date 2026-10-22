@@ -52,8 +52,9 @@ class ProductionSafetyValidatorTest {
         webAuthnProperties.setUserVerificationRequired(true);
         accountProperties.setPublicUrl("https://attendance.adesa.example");
         mailProperties.setHost("smtp.example.test");
+        mailProperties.setUsername("test-user");
+        mailProperties.setPassword("test-password");
         mailProperties.setFrom("Attendance <noreply@example.test>");
-        mailProperties.setSmtpAuth(false);
     }
 
     private ProductionSafetyValidator validator() {
@@ -170,7 +171,7 @@ class ProductionSafetyValidatorTest {
     void prodWithTrustedProxyRangeFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         properties.getNetwork().setTrustedProxies(List.of("10.0.0.0/8"));
 
         assertThatThrownBy(() -> validator().afterPropertiesSet())
@@ -184,7 +185,7 @@ class ProductionSafetyValidatorTest {
     void prodWithDevelopmentDatabasePasswordFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         when(environment.getProperty("spring.datasource.password"))
                 .thenReturn(ProductionSafetyValidator.DEV_DATABASE_PASSWORD);
 
@@ -198,7 +199,7 @@ class ProductionSafetyValidatorTest {
     void prodWithInsecureSessionCookieFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         when(environment.getProperty(
                         "server.servlet.session.cookie.secure", Boolean.class, Boolean.FALSE))
                 .thenReturn(Boolean.FALSE);
@@ -213,7 +214,7 @@ class ProductionSafetyValidatorTest {
     void prodWithLocalhostRpIdFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         webAuthnProperties.setRpId("localhost");
 
         assertThatThrownBy(() -> validator().afterPropertiesSet())
@@ -226,7 +227,7 @@ class ProductionSafetyValidatorTest {
     void prodWithNonHttpsOriginFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         webAuthnProperties.setAllowedOrigins(
                 new ArrayList<>(List.of("http://attendance.adesa.example")));
 
@@ -240,7 +241,7 @@ class ProductionSafetyValidatorTest {
     void prodWithOriginOutsideRpIdFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         webAuthnProperties.setAllowedOrigins(
                 new ArrayList<>(List.of("https://attendance.example.net")));
 
@@ -254,7 +255,7 @@ class ProductionSafetyValidatorTest {
     void prodWithoutUserVerificationFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         webAuthnProperties.setUserVerificationRequired(false);
 
         assertThatThrownBy(() -> validator().afterPropertiesSet())
@@ -267,7 +268,7 @@ class ProductionSafetyValidatorTest {
     void prodWithUnsafePublicUrlFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         accountProperties.setPublicUrl("http://attendance.adesa.example");
 
         assertThatThrownBy(() -> validator().afterPropertiesSet())
@@ -276,11 +277,37 @@ class ProductionSafetyValidatorTest {
     }
 
     @Test
+    @DisplayName("Prod profile rejects a public URL above the WebAuthn RP ID domain")
+    void prodWithPublicUrlOutsideRpIdFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        accountProperties.setPublicUrl("https://adesa.example");
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("does not match the WebAuthn RP ID");
+    }
+
+    @Test
+    @DisplayName("Prod profile rejects an APP_PUBLIC_URL that is not an origin")
+    void prodWithPublicUrlPathFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        accountProperties.setPublicUrl("https://attendance.adesa.example/path?token=not-a-real-token");
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("plain origin");
+    }
+
+    @Test
     @DisplayName("Prod profile without configured mail delivery fails startup")
     void prodWithoutConfiguredMailFails() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         mailProperties.setHost("");
 
         assertThatThrownBy(() -> validator().afterPropertiesSet())
@@ -289,11 +316,97 @@ class ProductionSafetyValidatorTest {
     }
 
     @Test
+    @DisplayName("Prod profile without SMTP transport encryption fails startup")
+    void prodWithoutMailEncryptionFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        mailProperties.setStarttlsEnable(false);
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must enable exactly one");
+    }
+
+    @Test
+    @DisplayName("Prod profile with both SMTP encryption modes enabled fails startup")
+    void prodWithConflictingMailEncryptionFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        mailProperties.setSslEnable(true);
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must enable exactly one");
+    }
+
+    @Test
+    @DisplayName("Prod profile rejects an SMTP port that does not match its TLS mode")
+    void prodWithMismatchedMailPortFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        mailProperties.setPort(465);
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("port 465 for implicit SSL or port 587 for STARTTLS");
+    }
+
+    @Test
+    @DisplayName("Prod profile requires SMTP authentication")
+    void prodWithoutSmtpAuthenticationFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        mailProperties.setSmtpAuth(false);
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MAIL_SMTP_AUTH must be true");
+    }
+
+    @Test
+    @DisplayName("Prod profile with SMTP authentication but no credentials fails startup")
+    void prodWithMissingMailCredentialsFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        mailProperties.setUsername("");
+        mailProperties.setPassword("");
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MAIL_USERNAME or MAIL_PASSWORD is unset");
+    }
+
+    @Test
+    void prodAcceptsConfiguredZohoApiWithoutAnySmtpCredentials() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
+        mailProperties.setProvider(MailProperties.Provider.ZOHO_API);
+        mailProperties.setHost("");
+        mailProperties.setUsername("");
+        mailProperties.setPassword("");
+        mailProperties.getZoho().setDataCenter(MailProperties.ZohoDataCenter.US);
+        mailProperties.getZoho().setAccountId("123456");
+        mailProperties.getZoho().setClientId("test-client");
+        mailProperties.getZoho().setClientSecret("test-secret");
+        mailProperties.getZoho().setRefreshToken("test-refresh");
+        validator().afterPropertiesSet();
+        mailProperties.getZoho().setRefreshToken("");
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("ZOHO_REFRESH_TOKEN");
+    }
+
+    @Test
     @DisplayName("Prod profile with restriction enabled and safe configuration starts")
     void prodWithValidConfigPasses() {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32", "198.51.100.10/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32", "198.51.100.10/32"));
 
         validator().afterPropertiesSet();
 
@@ -306,7 +419,7 @@ class ProductionSafetyValidatorTest {
         prod();
         properties.getNetwork().setEnforcementEnabled(true);
         properties.getNetwork().setLocalDevelopmentBypass(true);
-        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        properties.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
 
         assertThatThrownBy(() -> validator().afterPropertiesSet())
                 .isInstanceOf(IllegalStateException.class)
@@ -337,5 +450,22 @@ class ProductionSafetyValidatorTest {
 
         assertThat(source.getProperty("spring.datasource.password"))
                 .isEqualTo("${DB_PASSWORD}");
+    }
+
+    @Test
+    @DisplayName("Production requires explicit database and office-network endpoints")
+    void prodProfileRequiresExplicitDatabaseAndNetworkValues() throws IOException {
+        List<PropertySource<?>> sources =
+                new YamlPropertySourceLoader().load("prod", new ClassPathResource("application-prod.yml"));
+        PropertySource<?> source = sources.get(0);
+
+        assertThat(source.getProperty("spring.datasource.url")).isEqualTo("${DB_URL}");
+        assertThat(source.getProperty("spring.datasource.username")).isEqualTo("${DB_USERNAME}");
+        assertThat(source.getProperty("spring.datasource.hikari.data-source-properties.sslmode"))
+                .isEqualTo("require");
+        assertThat(source.getProperty("attendance.network.allowed-ipv4"))
+                .isEqualTo("${ATTENDANCE_ALLOWED_IPV4}");
+        assertThat(source.getProperty("attendance.network.local-development-bypass"))
+                .isEqualTo("${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}");
     }
 }

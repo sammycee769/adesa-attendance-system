@@ -56,6 +56,55 @@ class AdesaAttendanceApplicationTests {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private org.springframework.context.ApplicationContext context;
+
+    @Test
+    void concurrentBootstrapCreatesExactlyOneAdminAndNeverRepeatsAfterDemotion() throws Exception {
+        var employees = context.getBean(com.adesa.attendance.employee.EmployeeRepository.class);
+        var audits = context.getBean(com.adesa.attendance.audit.AuditLogRepository.class);
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(
+                context.getBean(org.springframework.transaction.PlatformTransactionManager.class));
+        var gate = new java.util.concurrent.CountDownLatch(1);
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var tasks = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < 2; i++) {
+                var properties = new com.adesa.attendance.config.BootstrapAdminProperties();
+                properties.setEmployeeNumber("BOOT-" + i);
+                properties.setFullName("Bootstrap Test " + i);
+                properties.setEmail("bootstrap" + i + "@adesa.test");
+                properties.setPassword("temporary-bootstrap-test-42");
+                var runner = new com.adesa.attendance.admin.FirstAdminBootstrap(properties,
+                        context.getBean(com.adesa.attendance.accounttoken.PasswordPolicy.class),
+                        employees, passwordEncoder, context.getBean(com.adesa.attendance.audit.AuditService.class),
+                        transaction, jdbcTemplate, audits);
+                tasks.add(executor.submit(() -> {
+                    gate.await();
+                    runner.run(null);
+                    return null;
+                }));
+            }
+            gate.countDown();
+            for (var task : tasks) {
+                task.get(60, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        }
+        assertThat(employees.countByRoleAndActiveTrue(com.adesa.attendance.employee.EmployeeRole.ADMIN))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_logs WHERE action = 'FIRST_ADMIN_BOOTSTRAPPED'", Long.class))
+                .isEqualTo(1L);
+        jdbcTemplate.update("UPDATE employees SET role = 'EMPLOYEE' WHERE employee_number LIKE 'BOOT-%'");
+        // A previous bootstrap event is durable even after a role change.
+        var retry = new com.adesa.attendance.config.BootstrapAdminProperties();
+        retry.setEmail("another@adesa.test");
+        new com.adesa.attendance.admin.FirstAdminBootstrap(retry,
+                context.getBean(com.adesa.attendance.accounttoken.PasswordPolicy.class), employees,
+                passwordEncoder, context.getBean(com.adesa.attendance.audit.AuditService.class),
+                transaction, jdbcTemplate, audits).run(null);
+        assertThat(employees.existsByEmail("another@adesa.test")).isFalse();
+    }
+
     @Test
     @DisplayName("Application context loads")
     void contextLoads() {
@@ -105,7 +154,7 @@ class AdesaAttendanceApplicationTests {
 
         // 1. The CSRF cookie must be readable by the SPA, so it is not HttpOnly.
         var csrf = restTemplate.getForEntity("/api/v1/auth/csrf", String.class);
-        assertThat(csrf.getStatusCode().value()).isEqualTo(204);
+        assertThat(csrf.getStatusCode().value()).isEqualTo(200);
         String csrfSetCookie = csrf.getHeaders().getFirst("Set-Cookie");
         assertThat(csrfSetCookie).startsWith("XSRF-TOKEN=");
         assertThat(csrfSetCookie).doesNotContain("HttpOnly");

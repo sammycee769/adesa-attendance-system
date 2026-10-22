@@ -44,8 +44,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * forwarded client address used, and only the right-most hop that is not itself
  * a trusted proxy is taken — an attacker cannot prepend an approved address.
  *
- * <p>The approved office network is the ADESA HQ public address
- * ({@code 105.127.6.174/32}).
+ * <p>The configured office network is a TEST-NET-2 fixture
+ * ({@code 198.51.100.174/32}), not an ADESA egress address.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -54,9 +54,9 @@ class AttendanceTrustedProxyTest {
 
     private static final String PASSWORD = "proxy-password-1";
 
-    private static final String OFFICE_PUBLIC_ADDRESS = "105.127.6.174";
-    private static final String APPROVED_CIDR = "105.127.6.174/32";
-    private static final String TRUSTED_PROXY_CIDR = "172.31.0.0/16";
+    private static final String OFFICE_PUBLIC_ADDRESS = "198.51.100.174";
+    private static final String APPROVED_CIDR = "198.51.100.174/32";
+    private static final String TRUSTED_PROXY_CIDR = "172.31.0.5/32";
     private static final String PROXY_ADDRESS = "172.31.0.5";
 
     @Container

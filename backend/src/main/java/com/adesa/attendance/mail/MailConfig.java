@@ -30,6 +30,23 @@ public class MailConfig {
 
     @Bean
     MailService mailService(MailProperties mailProperties) {
+        if (mailProperties.getProvider() == MailProperties.Provider.ZOHO_API) {
+            if (!mailProperties.isConfigured()) {
+                throw new IllegalStateException("Zoho Mail API configuration is incomplete: set MAIL_FROM, "
+                        + "ZOHO_DATA_CENTER, ZOHO_MAIL_ACCOUNT_ID and all three ZOHO OAuth credentials.");
+            }
+            var client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(10))
+                    .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
+                    .build();
+            var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(client);
+            factory.setReadTimeout(java.time.Duration.ofSeconds(15));
+            log.info("Mail delivery uses Zoho Mail HTTPS API (data center={})",
+                    mailProperties.getZoho().getDataCenter());
+            return new ZohoApiMailService(mailProperties,
+                    org.springframework.web.client.RestClient.builder().requestFactory(factory).build(),
+                    java.time.Clock.systemUTC());
+        }
         if (!mailProperties.isConfigured()) {
             log.warn("Mail delivery is DISABLED: set MAIL_HOST and MAIL_FROM to enable account-setup "
                     + "and password-recovery e-mail. Messages will be logged instead of sent.");
@@ -47,8 +64,10 @@ public class MailConfig {
         props.put("mail.transport.protocol", "smtp");
         props.put("mail.smtp.auth", Boolean.toString(mailProperties.isSmtpAuth()));
         props.put("mail.smtp.starttls.enable", Boolean.toString(mailProperties.isStarttlsEnable()));
+        props.put("mail.smtp.starttls.required", Boolean.toString(mailProperties.isStarttlsEnable()));
         // Implicit TLS (port 465) and STARTTLS (port 587) are mutually exclusive.
         props.put("mail.smtp.ssl.enable", Boolean.toString(mailProperties.isSslEnable()));
+        props.put("mail.smtp.ssl.checkserveridentity", "true");
         props.put("mail.smtp.connectiontimeout", "10000");
         props.put("mail.smtp.timeout", "10000");
         props.put("mail.smtp.writetimeout", "10000");

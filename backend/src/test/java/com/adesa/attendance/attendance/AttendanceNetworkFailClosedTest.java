@@ -47,9 +47,9 @@ class AttendanceNetworkFailClosedTest {
 
     private static final String PASSWORD = "fail-closed-password-1";
 
-    /** The approved ADESA HQ office address, correctly configured. */
-    private static final String APPROVED_CIDR = "105.127.6.174/32";
-    private static final String OFFICE_PUBLIC_ADDRESS = "105.127.6.174";
+    /** Documentation-only address configured to exercise the policy. */
+    private static final String APPROVED_CIDR = "198.51.100.174/32";
+    private static final String OFFICE_PUBLIC_ADDRESS = "198.51.100.174";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")

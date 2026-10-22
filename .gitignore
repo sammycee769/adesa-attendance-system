@@ -1,6 +1,7 @@
 # Local configuration and secrets — never commit
 .env
 .env.local
+.env.zoho-render
 
 # Restricted security log (client addresses of denied attempts)
 logs/

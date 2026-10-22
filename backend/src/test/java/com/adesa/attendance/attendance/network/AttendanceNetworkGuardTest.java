@@ -146,7 +146,7 @@ class AttendanceNetworkGuardTest {
 
     @Test
     void denialCarriesTheReasonOutsideTheApprovedNetwork() {
-        AttendanceNetworkGuard guard = guard(true, List.of("105.127.6.174/32"), List.of());
+        AttendanceNetworkGuard guard = guard(true, List.of("198.51.100.174/32"), List.of());
 
         assertThatThrownBy(() -> guard.requireApprovedClientNetwork(request("203.0.113.50", null)))
                 .isInstanceOf(NetworkAccessDeniedException.class)
@@ -160,7 +160,7 @@ class AttendanceNetworkGuardTest {
 
     @Test
     void denialCarriesTheReasonWhenTheAddressIsUnresolved() {
-        AttendanceNetworkGuard guard = guard(true, List.of("105.127.6.174/32"), List.of());
+        AttendanceNetworkGuard guard = guard(true, List.of("198.51.100.174/32"), List.of());
 
         assertThatThrownBy(() -> guard.requireApprovedClientNetwork(request("", null)))
                 .isInstanceOf(NetworkAccessDeniedException.class)
@@ -170,7 +170,7 @@ class AttendanceNetworkGuardTest {
 
     @Test
     void anIpv6ClientIsRejectedWithItsOwnReason() {
-        AttendanceNetworkGuard guard = guard(true, List.of("105.127.6.174/32"), List.of());
+        AttendanceNetworkGuard guard = guard(true, List.of("198.51.100.174/32"), List.of());
 
         assertThatThrownBy(() -> guard.requireApprovedClientNetwork(request("2001:db8::1", null)))
                 .isInstanceOf(NetworkAccessDeniedException.class)

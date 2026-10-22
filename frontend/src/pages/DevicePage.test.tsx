@@ -64,7 +64,9 @@ describe('device setup', () => {
     await renderDevicePage();
 
     expect(screen.getByRole('button', { name: 'Register this device' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Device' })).toHaveTextContent('No device registered');
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'Device' })).toHaveTextContent('No device registered'),
+    );
   });
 
   it('waits for the administrator approval after a registration', async () => {

@@ -3,10 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 /**
- * The frontend is served from the same origin as the API in every deployed
- * environment: the dev server proxies `/api` to the Spring Boot backend, so the
- * session cookie and the CSRF cookie work without CORS and without relaxing
- * the backend's security configuration.
+ * The development server proxies `/api` to the Spring Boot backend. Production
+ * uses VITE_API_BASE_URL; the backend permits only APP_PUBLIC_URL through CORS.
  */
 export default defineConfig({
   plugins: [react()],

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiRequest, readCookie } from './client';
+import { ApiError, apiRequest, readCookie, resetCsrfBootstrap } from './client';
 
 /** Runs a request that is expected to fail and returns the resulting error. */
 async function captureError(promise: Promise<unknown>): Promise<ApiError> {
@@ -16,6 +16,7 @@ async function captureError(promise: Promise<unknown>): Promise<ApiError> {
 
 describe('api client', () => {
   beforeEach(() => {
+    resetCsrfBootstrap();
     document.cookie = 'XSRF-TOKEN=token-123';
   });
 
@@ -36,6 +37,19 @@ describe('api client', () => {
     expect(options.credentials).toBe('include');
     expect((options.headers as Record<string, string>)['X-XSRF-TOKEN']).toBe('token-123');
     expect((options.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+  });
+
+  it('uses the JSON token when the backend cookie is unreadable across origins', async () => {
+    document.cookie = 'XSRF-TOKEN=; Max-Age=0';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'cross-origin-token' })))
+      .mockResolvedValueOnce(new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    await apiRequest('/api/v1/auth/login', { method: 'POST', body: {} });
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/v1/auth/csrf');
+    const options = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect((options.headers as Record<string, string>)['X-XSRF-TOKEN']).toBe('cross-origin-token');
+    expect(options.credentials).toBe('include');
   });
 
   it('does not send a CSRF token on a read request', async () => {

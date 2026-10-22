@@ -91,8 +91,8 @@ attendance:
     # Refused whenever the 'prod' profile is active.
     local-development-bypass: ${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}
     # Approved office egress addresses (IPv4 only), supplied by ADESA IT.
-    # The default is the confirmed ADESA HQ public IPv4 address.
-    allowed-ipv4: ${ATTENDANCE_ALLOWED_IPV4:105.127.6.174/32}
+    # Empty by default: never assume an observed address is what the server sees.
+    allowed-ipv4: ${ATTENDANCE_ALLOWED_IPV4:}
     # Reverse proxies whose forwarding headers may be trusted. EMPTY until the
     # hosting topology is confirmed: never invent these addresses. When a
     # platform load balancer sits in front of the application, its address (or
@@ -152,9 +152,16 @@ adesa:
     # Rate limit for the public recovery endpoints (per client address).
     recovery-max-attempts: ${RECOVERY_MAX_ATTEMPTS:5}
     recovery-window: ${RECOVERY_WINDOW:15m}
-  # Zoho Mail (or any SMTP) delivery. Leave MAIL_HOST empty to disable delivery
-  # completely (development/tests log the message instead of sending it).
+  # Explicit transport selection. Zoho API uses HTTPS, suitable for Render free.
+  # Unconfigured SMTP is logged only in development; prod refuses to start.
   mail:
+    provider: ${MAIL_PROVIDER:smtp}
+    zoho:
+      data-center: ${ZOHO_DATA_CENTER:}
+      account-id: ${ZOHO_MAIL_ACCOUNT_ID:}
+      client-id: ${ZOHO_CLIENT_ID:}
+      client-secret: ${ZOHO_CLIENT_SECRET:}
+      refresh-token: ${ZOHO_REFRESH_TOKEN:}
     host: ${MAIL_HOST:}
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}

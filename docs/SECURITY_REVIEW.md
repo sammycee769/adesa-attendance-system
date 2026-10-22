@@ -12,6 +12,11 @@ changes made in response to this review.
 > a genuinely different network (checklist items 2.10 and 2.11). Until those are done, the system is
 > "pilot-ready pending network sign-off", not "production-verified".
 
+> **Deployment values update:** the office IP quoted in the original review is historical and is not
+> a production default. `application-prod.yml` now requires an explicit office CIDR, which must be
+> selected only after the actual Render-resolved path has been verified. See the current procedure
+> in `README.md`.
+
 ---
 
 ## 1. How this review was performed
@@ -30,7 +35,7 @@ person was physically in the ADESA office — and (b) employee personal data (na
 password hashes, attendance times). The primary controls the system relies on are:
 
 1. **Office-network enforcement** — an attendance action is only accepted when the resolved client
-   address is in the approved office allowlist (`105.127.6.174/32`).
+   address is in the narrow office allowlist confirmed by ADESA IT for the deployed path.
 2. **Device binding** — an approved WebAuthn passkey tied to one employee.
 3. **Authenticated, role-checked sessions** — server-side sessions, CSRF protection, method-level
    authorisation.

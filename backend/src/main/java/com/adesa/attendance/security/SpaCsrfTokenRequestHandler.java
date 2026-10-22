@@ -32,7 +32,7 @@ public final class SpaCsrfTokenRequestHandler implements CsrfTokenRequestHandler
         // Force the token to be resolved now, so a missing token is generated
         // and written to the XSRF-TOKEN cookie during this request instead of
         // being deferred until something happens to read it.
-        csrfToken.get();
+        request.setAttribute("adesa.rawCsrfToken", csrfToken.get());
     }
 
     @Override

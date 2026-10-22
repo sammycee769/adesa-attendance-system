@@ -2,8 +2,12 @@ package com.adesa.attendance.admin;
 
 import java.util.Map;
 
+import com.adesa.attendance.accounttoken.PasswordPolicy;
 import com.adesa.attendance.audit.AuditAction;
 import com.adesa.attendance.audit.AuditService;
+import com.adesa.attendance.audit.AuditLogRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
+import com.adesa.attendance.common.BadRequestException;
 import com.adesa.attendance.config.BootstrapAdminProperties;
 import com.adesa.attendance.employee.Employee;
 import com.adesa.attendance.employee.EmployeeRepository;
@@ -31,45 +35,44 @@ public class FirstAdminBootstrap implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(FirstAdminBootstrap.class);
 
     private final BootstrapAdminProperties properties;
+    private final PasswordPolicy passwordPolicy;
     private final EmployeeRepository employeeRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
     private final TransactionTemplate transactionTemplate;
+    private final JdbcTemplate jdbc;
+    private final AuditLogRepository auditLogs;
 
-    public FirstAdminBootstrap(BootstrapAdminProperties properties, EmployeeRepository employeeRepository,
-                               PasswordEncoder passwordEncoder, AuditService auditService,
-                               TransactionTemplate transactionTemplate) {
+    public FirstAdminBootstrap(BootstrapAdminProperties properties, PasswordPolicy passwordPolicy,
+                               EmployeeRepository employeeRepository, PasswordEncoder passwordEncoder,
+                               AuditService auditService,
+                               TransactionTemplate transactionTemplate, JdbcTemplate jdbc, AuditLogRepository auditLogs) {
         this.properties = properties;
+        this.passwordPolicy = passwordPolicy;
         this.employeeRepository = employeeRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
         this.transactionTemplate = transactionTemplate;
+        this.jdbc = jdbc;
+        this.auditLogs = auditLogs;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        // An administrator exists only if one is ACTIVE: an inactive
-        // administrator cannot authorize anything, so it must not block the
-        // controlled recovery path that establishes a working administrator.
-        boolean activeAdminExists = transactionTemplate.execute(
-                status -> employeeRepository.existsByRoleAndActiveTrue(EmployeeRole.ADMIN));
-
         if (!properties.isRequested()) {
-            if (Boolean.FALSE.equals(activeAdminExists)) {
-                log.warn("No ACTIVE ADMIN account exists. To create the first administrator, set "
-                        + "ADESA_BOOTSTRAP_ADMIN_EMPLOYEE_NUMBER, ADESA_BOOTSTRAP_ADMIN_FULL_NAME, "
-                        + "ADESA_BOOTSTRAP_ADMIN_EMAIL and ADESA_BOOTSTRAP_ADMIN_PASSWORD, then restart. "
-                        + "Unset them again after the account is created.");
-            }
             return;
         }
-        if (Boolean.TRUE.equals(activeAdminExists)) {
-            log.info("Admin bootstrap requested but an ACTIVE ADMIN account already exists; skipping. "
-                    + "Unset the ADESA_BOOTSTRAP_ADMIN_* variables.");
-            return;
-        }
-        validate();
         transactionTemplate.executeWithoutResult(status -> {
+            // Serialize all initializers, including different emails. The lock is
+            // released on commit/rollback, and also excludes employee writes.
+            jdbc.execute("LOCK TABLE employees IN EXCLUSIVE MODE");
+            if (employeeRepository.existsByRole(EmployeeRole.ADMIN)
+                    || auditLogs.existsByAction(AuditAction.FIRST_ADMIN_BOOTSTRAPPED)) {
+                log.info("First-admin bootstrap already completed or an administrator exists; skipping. "
+                        + "Unset the ADESA_BOOTSTRAP_ADMIN_* variables.");
+                return;
+            }
+            validate();
             Employee admin = new Employee(
                     properties.getEmployeeNumber().trim(),
                     properties.getFullName().trim(),
@@ -77,6 +80,7 @@ public class FirstAdminBootstrap implements ApplicationRunner {
                     passwordEncoder.encode(properties.getPassword()),
                     EmployeeRole.ADMIN,
                     true);
+            admin.setMustChangePassword(true);
             employeeRepository.save(admin);
             auditService.record(null, AuditAction.FIRST_ADMIN_BOOTSTRAPPED, "EMPLOYEE", admin.getId(),
                     Map.of("employeeNumber", admin.getEmployeeNumber(), "email", admin.getEmail()));
@@ -97,6 +101,14 @@ public class FirstAdminBootstrap implements ApplicationRunner {
         if (password.length() < 12 || password.length() > 128) {
             throw new IllegalStateException(
                     "Admin bootstrap password must be 12-128 characters.");
+        }
+        try {
+            passwordPolicy.enforce(password);
+        } catch (BadRequestException ex) {
+            throw new IllegalStateException(
+                    "Admin bootstrap password does not meet the configured password policy: "
+                            + ex.getMessage(),
+                    ex);
         }
     }
 }

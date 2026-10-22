@@ -92,9 +92,9 @@ npm install
 npm run dev     # http://localhost:5173 — proxies /api to http://localhost:8080
 ```
 
-The frontend is served from the same origin as the API (the dev server proxies
-`/api`), so the session cookie and the CSRF token work without CORS and
-without weakening the backend's security configuration.
+Local development serves the frontend through Vite, which proxies `/api`.
+Production supports an exact configured frontend origin using credentialed CORS
+and CSRF-protected requests.
 
 Alternatively the development server can run in Docker:
 
@@ -177,7 +177,7 @@ three areas:
 cd frontend
 npm install
 npm run dev        # development server on http://localhost:5173
-npm test           # 55 tests
+npm test
 npm run typecheck  # TypeScript check without emitting
 npm run build      # production build into frontend/dist
 ```
@@ -220,36 +220,46 @@ Key settings:
 
 | Variable | Purpose | Notes |
 |---|---|---|
-| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL connection | Least-privilege account in prod |
+| `SPRING_PROFILES_ACTIVE` | Active Spring profile | Set to `prod` on Render |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL connection | Required in prod; use the selected Supabase JDBC endpoint with TLS |
 | `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED` | Office-network enforcement switch (`attendance.network.enforcement-enabled`) | Off by default; must be `true` in prod |
 | `ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS` | Explicit local-development override (`attendance.network.local-development-bypass`) | Off by default. When enforcement is off **and** this is off, attendance FAILS CLOSED (HTTP 403). Refused whenever the `prod` profile is active |
-| `ATTENDANCE_ALLOWED_IPV4` | Approved office egress CIDRs, IPv4 only (`attendance.network.allowed-ipv4`) | `105.127.6.174/32` — the ADESA HQ public address |
-| `ATTENDANCE_TRUSTED_PROXY_ADDRESSES` | Proxies whose `X-Forwarded-For` may be trusted (`attendance.network.trusted-proxies`) | Empty until the hosting topology is confirmed |
+| `ATTENDANCE_ALLOWED_IPV4` | Approved office egress CIDRs, IPv4 only (`attendance.network.allowed-ipv4`) | Required explicitly in prod; use the narrow address confirmed from the Render service after office-path verification |
+| `ATTENDANCE_TRUSTED_PROXY_ADDRESSES` | Proxies whose `X-Forwarded-For` may be trusted (`attendance.network.trusted-proxies`) | Leave empty unless the actual Render peer, header behavior, and stable proxy address have been verified |
 | `ATTENDANCE_CLIENT_IP_HEADER` | Header carrying the forwarded client address | Default `X-Forwarded-For` |
-| `SECURITY_LOG_FILE` | Restricted security log (denied attendance attempts) | Default `logs/security.log`; IT-only access |
+| `SECURITY_LOG_FILE` | Development-only restricted security log | Production security events go to stderr; no writable log directory is required |
 | `ATTENDANCE_TIMEZONE` | Timezone that defines the attendance workday | Default `Africa/Lagos` |
 | `WEBAUTHN_RP_ID`, `WEBAUTHN_ALLOWED_ORIGINS` | WebAuthn relying party | Must match deployed domain |
+| `WEBAUTHN_USER_VERIFICATION_REQUIRED` | Require authenticator biometric/PIN verification | Must be `true` in prod |
+| `APP_PUBLIC_URL` | Frontend origin used in setup/recovery links | Required HTTPS origin within the WebAuthn RP ID |
+| `MAIL_PROVIDER`, `MAIL_FROM` | Delivery provider and authorized sender | `zoho-api` for Render free; `smtp` remains supported |
+| `ZOHO_DATA_CENTER`, `ZOHO_MAIL_ACCOUNT_ID`, `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN` | Zoho HTTPS API configuration | Required for `zoho-api`; [private setup instructions](docs/ZOHO_MAIL_API_SETUP.md) |
+| `MAIL_HOST`, `MAIL_PORT` | SMTP host and port | Required only for SMTP; use the mailbox's data centre |
+| `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_SMTP_AUTH` | SMTP authentication | Authentication defaults on; store credentials as Render secrets |
+| `MAIL_SMTP_STARTTLS_ENABLE`, `MAIL_SMTP_SSL_ENABLE` | SMTP transport encryption | Exactly one enabled; STARTTLS for port 587 or implicit TLS for port 465 |
+| `ADESA_BOOTSTRAP_ADMIN_EMPLOYEE_NUMBER`, `ADESA_BOOTSTRAP_ADMIN_FULL_NAME`, `ADESA_BOOTSTRAP_ADMIN_EMAIL`, `ADESA_BOOTSTRAP_ADMIN_PASSWORD` | One-time first-admin bootstrap | Only before any admin/bootstrap audit exists; unset after creation and rotate at first login |
+| `VITE_API_BASE_URL` | Frontend API prefix | Actual backend HTTPS origin for Vercel, without `/api/v1`; never put secrets in `VITE_` variables |
+| `PORT` | Render's HTTP port | Supplied by Render; Docker startup binds to it |
 | `SESSION_IDLE_TIMEOUT`, `SESSION_ABSOLUTE_TIMEOUT` | Session idle / absolute lifetime | Defaults `30m` / `12h` |
 | `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW` | Failed-login lockout window | HTTP 429 when exceeded |
 | `WEBAUTHN_CHALLENGE_TTL`, `DEVICE_PROOF_TTL` | Single-use ceremony lifetimes | Defaults `2m` |
 | `SESSION_COOKIE_SECURE` | Session cookie `Secure` flag | Forced `true` in the `prod` profile |
 
-### Office-network policy (implemented; enforcement OFF pending on-site verification)
+### Office-network policy (production values require hosted verification)
 
-**Topology.** The application is hosted on a **public cloud server**. ADESA HQ
-has a router whose public IPv4 address is fixed at **`105.127.6.174`** (supplied
-by ADESA). Every device that leaves the office through that connection is seen
-by the server as `105.127.6.174`. The hosting topology (direct exposure vs. a
-platform load balancer / reverse proxy in front of the application) is **not
-yet confirmed by ADESA IT** — no proxy address is invented here; the
-configuration for it is empty until IT confirms it.
+The application does not assume that an address previously observed at ADESA
+is the client address Render will deliver to this container. The office egress
+address, Render proxy path, and forwarding-header behavior must be verified
+against the deployed service by ADESA IT before configuring the production
+allowlist. The `prod` profile requires an explicit allowlist and refuses
+startup if enforcement is disabled; it has no production default CIDR.
 
 **Configuration** (environment, never hardcoded):
 
 ```properties
 attendance.network.enforcement-enabled=${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
 attendance.network.local-development-bypass=${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}
-attendance.network.allowed-ipv4=${ATTENDANCE_ALLOWED_IPV4:105.127.6.174/32}
+attendance.network.allowed-ipv4=${ATTENDANCE_ALLOWED_IPV4:}
 attendance.network.trusted-proxies=${ATTENDANCE_TRUSTED_PROXY_ADDRESSES:}
 ```
 
@@ -272,13 +282,10 @@ attendance.network.trusted-proxies=${ATTENDANCE_TRUSTED_PROXY_ADDRESSES:}
 **IPv4 only — IPv6 cannot bypass the policy.** The allowlist is IPv4-only. A
 native IPv6 client address is never approved (reason
 `IPV6_CLIENT_NOT_APPROVED`), and configuring an IPv6 range is a startup error.
-An IPv4-mapped address (`::ffff:105.127.6.174`) is the same IPv4 host on a
-dual-stack socket and is normalised, so it is treated as `105.127.6.174`.
-
-Only the public office address is approved. The office's private subnets, the
-laptop's local address (`192.168.3.170`) and link-local IPv6 addresses are
-deliberately **not** on the list: they are not routable to the server and would
-only widen the policy.
+An IPv4-mapped address (`::ffff:a.b.c.d`) is normalised to its IPv4 host.
+Native IPv6 clients remain unapproved. Configure only the narrow IPv4
+office-egress CIDR verified as seen by the application. Do not allow private,
+laptop, link-local, broad provider, or guessed proxy ranges.
 
 The office-network check is an **additional, independent** requirement. It never
 replaces the WebAuthn/passkey ceremony or the registered-device check: an
@@ -314,21 +321,22 @@ curl http://127.0.0.1:8080/...            # 127.0.0.1/32
 curl http://[::1]:8080/...                # reason IPV6_CLIENT_NOT_APPROVED
 ```
 
-### Denied attempts and the restricted security log
+### Denied attempts and the security log
 
-Every refused attendance attempt is written to the **restricted security log**
-(`SECURITY` logger → `logs/security.log`, configurable via
-`SECURITY_LOG_FILE`). Each entry carries the timestamp, the resolved client IP,
-the reason and the acting employee:
+Every refused attendance attempt is written to the dedicated `SECURITY` logger.
+In production it is routed to stderr, separately from application logs on
+stdout, for Render capture. In non-production it is written to a restricted
+rolling file (configurable with `SECURITY_LOG_FILE`). Each entry carries the
+timestamp, resolved client IP, reason and acting employee:
 
 ```
 2026-10-21T10:13:44.076+01:00 WARN SECURITY - event=attendance_denied action=SIGN_IN \
     reason=OUTSIDE_APPROVED_NETWORK client_ip=198.51.100.77 employee=e7584eb0-…
 ```
 
-The security logger does not propagate to the general application log, so the
-resolved address stays in the restricted file. The file must only be readable by
-the operations/IT account. The business audit trail keeps the generic reason
+The security logger does not propagate to the general application log or
+business audit trail. Restrict access to captured security logs to authorized
+operations/IT staff; the business audit trail keeps the generic reason
 `NETWORK_NOT_APPROVED` and no network detail.
 
 ### Verifying the office address before enforcement is switched on
@@ -348,38 +356,80 @@ configured networks or the trusted proxies. The raw forwarding header is
 reported separately as `untrustedForwardedClientAddress` for troubleshooting
 only; it never influences the policy decision.
 
-Rollout:
+Safe verification order:
 
-1. Deploy with `ATTENDANCE_ALLOWED_IPV4=105.127.6.174/32` and
-   `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=false`.
-2. **Identify the topology.** From a laptop **inside** the office network, call
-   the diagnostics endpoint as an administrator.
-   - `resolvedClientAddress` = `105.127.6.174` → the application is exposed
-     directly; continue with step 3.
-   - `resolvedClientAddress` = something else (for example a platform load
-     balancer) → the request arrived through a proxy. Add the proxy's
-     address/range to `ATTENDANCE_TRUSTED_PROXY_ADDRESSES` — the address IT
-     confirms from the provider, never a guessed one — and repeat the check.
-     The field `untrustedForwardedClientAddress` shows what the proxy
-     forwarded, for comparison with the provider's own logs.
-3. **Confirm from ADESA HQ Wi-Fi**: `resolvedClientAddress` = `105.127.6.174`
-   and `withinApprovedNetwork` = `true`.
-4. **Confirm denial from an external hotspot**: the same sign-in attempt from a
-   mobile hotspot must be refused with HTTP 403 and must appear in the security
-   log with the hotspot's address.
-5. Set `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true` and restart. Verify that a
-   sign-in from the office succeeds and a sign-in from outside is refused with
-   HTTP 403.
-6. Deploy the `prod` profile with `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true`
-   and `ATTENDANCE_ALLOWED_IPV4=105.127.6.174/32`. The `prod` profile never
-   enables the restriction on its own — it refuses to start until the switch is
-   set deliberately — so an accidental bypass is a startup failure and never a
-   silent misconfiguration.
+1. Use a non-production Render service with a separate scratch database and
+   the same service topology intended for production. Set
+   `SPRING_PROFILES_ACTIVE=prod`,
+   `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true`,
+   `ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false`, and a reserved
+   documentation-only CIDR such as `192.0.2.1/32` as a temporary deny-all
+   canary allowlist. This is not the office address or a production
+   configuration. Do not use production data.
+2. Keep existing ADMIN authentication enabled. Restrict access at the
+   Render/edge layer to the test operators where possible. From ADESA HQ Wi-Fi,
+   sign in as a test ADMIN and call `GET
+   /api/v1/admin/network/client-address`; repeat from a mobile hotspot. Do not
+   expose the endpoint unauthenticated or weaken the security matchers.
+3. Record `resolvedClientAddress` from both paths and compare the separately
+   labelled `untrustedForwardedClientAddress` only as evidence. A forwarded
+   value is never trusted just because it appears in that field. Confirm with
+   Render's current service/network documentation and logs whether the
+   container peer is the client or a proxy. Only configure a proxy if its
+   stable direct-peer IPv4 address and exact header behavior are verified; the
+   resolver accepts only explicit `/32` proxy addresses. Stop if Render uses
+   dynamic proxy addresses or the chain cannot be verified safely.
+4. Obtain the actual narrow office IPv4 egress address from ADESA IT/router
+   records and confirm the application resolves that address from office
+   Wi-Fi. Confirm the hotspot resolves to a different, unapproved IPv4 address.
+   If either path is ambiguous, keep the canary in place and attendance
+   unavailable.
+5. Only after steps 3 and 4 succeed, set
+   `ATTENDANCE_ALLOWED_IPV4=<verified-office-ipv4>/32`, retaining enforcement
+   `true` and the bypass `false`. Deploy and repeat authenticated diagnostics
+   from office and hotspot. Confirm office is within the allowlist and hotspot
+   outside it before any real attendance use. Keep ADMIN-only authorization and
+   edge access controls in place.
 
-Steps 3 and 4 have **not been executed** — they need ADESA HQ Wi-Fi and a
-mobile hotspot and are tracked in `docs/DEPLOYMENT_CHECKLIST.md` (items 2.10
-and 2.11). The automated tests prove the enforcement logic, not the real
-network path.
+The hosted network procedure has not been executed. Automated tests verify the
+resolver and fail-closed policy, not Render's real network path.
+
+### Render deployment configuration
+
+Use the repository's `backend` directory as the Docker build context/root
+directory because `backend/Dockerfile` copies `pom.xml` and `src` relative to
+that directory. The container listens on Render's supplied `PORT` (with an
+8080 fallback). The health-check path is `/actuator/health`; do not use the
+network diagnostic path as a health check.
+
+The Dockerfile builds the executable Spring Boot jar but skips tests. Run the
+repository CI workflow or Maven and frontend checks before deployment. Flyway
+migrations run during application startup and Hibernate uses
+`ddl-auto: validate`, so migration or schema mismatch fails startup. No
+production seed data is configured.
+
+This repository has no Render or Vercel service manifest. The GitHub Actions
+workflow runs checks on pushes and pull requests, but it does not by itself
+prevent a Render auto-deploy. Keep auto-deploy disabled or configure Render to
+deploy only after the required CI checks pass.
+
+For Supabase, set `DB_URL` to the JDBC form of the actual project's direct or
+pooler endpoint, and set `DB_USERNAME`/`DB_PASSWORD` to provisioned database
+credentials. Production forces PostgreSQL `sslmode=require`. Use a
+migration-capable least-privilege role. The project host, port, username
+(including any pooler suffix), database, and supported pool mode must be copied
+from the Supabase dashboard and tested against a scratch database; none can be
+verified from this repository. Prefer direct or session-mode connections unless
+the chosen transaction pooler is proven compatible with Flyway, Hibernate, and
+prepared statements.
+
+For Vercel, set `VITE_API_BASE_URL` to the actual backend HTTPS origin without
+`/api/v1`. The backend allows credentialed CORS only from `APP_PUBLIC_URL`.
+The CSRF bootstrap returns JSON plus a backend cookie; the frontend echoes the
+JSON token as a header. Production cookies are Secure and default to SameSite=None.
+Browsers may block cookies across unrelated `vercel.app` and `onrender.com` sites;
+prefer sibling custom domains and set `SESSION_COOKIE_SAME_SITE=lax` in that case.
+See [the deployment handover](docs/PRODUCTION_HANDOVER.md) for rollout gates.
 
 ### Cloud firewall / edge restrictions (required second layer)
 
@@ -454,12 +504,14 @@ mvn spring-boot:run
 
 Rules enforced by the backend:
 
-- The bootstrap only runs when **no ACTIVE ADMIN account exists**; if an active
-  administrator exists, the variables are ignored and startup logs a notice. An
-  inactive administrator does not block the bootstrap, so it is also the
-  recovery path when the only administrator has been deactivated.
+- Bootstrap runs only when no ADMIN (active or inactive) and no
+  `FIRST_ADMIN_BOOTSTRAPPED` audit event exist. The check and creation use a
+  single database transaction and an exclusive employee-table lock, preventing
+  concurrent startup races even with different bootstrap emails. Deactivation
+  or demotion never permits bootstrap to run again.
 - All four values must be provided; the password must be 12-128 characters and
-  is stored only as a BCrypt hash.
+  comply with the configured password policy. It is stored only as a BCrypt
+  hash and the account is forced to change it before using other features.
 - The creation is written to `audit_logs` (`FIRST_ADMIN_BOOTSTRAPPED`).
 - **Unset the variables after the account exists.** Do not persist the
   bootstrap password anywhere; the administrator must change it right after
@@ -497,11 +549,9 @@ body (timestamp, status, error, message, path, fieldErrors).
 - **The system is never left without an active administrator.** Changing the
   role of the last active administrator away from `ADMIN` is refused (HTTP 409,
   audited). Reactivating an already-active account is a conflict (HTTP 409).
-- **Recovering a system whose only administrator is inactive.** The bootstrap
-  runs when **no ACTIVE** administrator exists, so an operator can restore access
-  by bootstrapping a fresh administrator (see "Creating the first
-  administrator"), then reactivate the original account through the endpoint.
-  Accounts are never reactivated automatically.
+- **Recovering an inactive administrator** requires an authorized existing
+  administrator or a separately reviewed operator recovery procedure. Restart
+  bootstrap never creates or reactivates accounts as a recovery shortcut.
 
 ## Phase 3 API (implemented)
 
@@ -678,7 +728,7 @@ ADESA:
 
 | # | Open point | Owner | Current behaviour |
 |---|---|---|---|
-| 1 | Hosting topology (direct exposure vs. platform load balancer) and the trusted proxy addresses | ADESA IT | The office public address `105.127.6.174/32` is configured as the allowlist. The trusted-proxy list is empty because the topology is unconfirmed; no proxy address is invented. Enforcement stays off until the client address is verified on site (rollout procedure above, checklist items 2.8–2.13). |
+| 1 | Hosting topology (direct exposure vs. platform load balancer) and trusted proxy addresses | ADESA IT | No production office CIDR is assumed. The trusted-proxy list is empty until Render's actual path, forwarded-header behavior, and stable peer address are verified; enforcement remains a startup gate. |
 | 2 | `WEBAUTHN_RP_ID` and the allowed origins of the deployed domain | ADESA IT | `localhost` / `http://localhost:5173` placeholders. Passkeys only work once these match the real domain. |
 | 3 | Working hours, late/early rules and how absences are derived | HR | The engine records sign-in/sign-out only. It never marks anyone absent. |
 | 4 | A workday that was signed in but never signed out | HR | A sign-out only applies to the current workday; an open workday from an earlier day stays open and needs an authorised correction. |
@@ -686,19 +736,16 @@ ADESA:
 | 6 | Retention period for audit logs and attendance records | ADESA | Nothing is deleted automatically. |
 | 7 | Whether strict physical-device binding is required | ADESA IT | Passkeys may be synced; a device-bound authenticator would have to be evaluated. |
 | 8 | Session storage when more than one application instance runs | ADESA IT | Sessions live in the instance's memory; a shared store is required for a multi-instance deployment. |
-| 9 | How the built frontend is served in production (reverse proxy, SPA fallback, TLS termination) | ADESA IT | `npm run build` produces `frontend/dist`. The application expects to be served from the same origin as the API, with `/api` forwarded to the backend and all other paths falling back to `index.html`. No decision about the reverse proxy product has been made. |
+| 9 | How the built frontend is served in production (reverse proxy, SPA fallback, TLS termination) | ADESA IT | `npm run build` produces `frontend/dist`, hosted on Vercel with SPA fallback. The frontend calls the Render HTTPS API origin directly, with exact-origin CORS and Secure cookies. Confirm browser cookie compatibility before onboarding. |
 | 10 | The exact scope of the HR attendance view (which employees HR may see, whether corrections need a second approval) | ADESA HR | Every active employee's attendance is visible to HR. A correction takes effect immediately and is recorded with the officer's name; a second-person approval is not implemented. |
 
 ## Security notes and limitations
 
-- Attendance actions are restricted to the approved ADESA office network by a
-  backend policy (`attendance` feature). The approved network is the office
-  public address `105.127.6.174/32`, supplied by ADESA and configured through
-  the environment. Enforcement is still **disabled** until the application has
-  been verified to resolve that address for requests coming through the office
-  network (rollout procedure above); the `prod` profile refuses to start while
-  it is disabled. A cloud firewall or edge-level restriction remains a required
-  second layer.
+- Attendance actions are restricted to the verified ADESA office egress CIDR by
+  a backend policy. No public IP is assumed in production configuration;
+  enforcement is a startup gate and must not be enabled for real attendance
+  until the Render path is confirmed from office Wi-Fi and a mobile hotspot. A
+  cloud firewall or edge-level restriction remains a required second layer.
 - The office-network policy is IPv4-only. IPv6 traffic is never approved and
   cannot be used to bypass the IPv4 allowlist.
 - The resolved client address of a refused attempt is written to the restricted

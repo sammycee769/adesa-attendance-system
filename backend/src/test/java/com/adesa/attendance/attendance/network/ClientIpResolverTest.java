@@ -99,6 +99,20 @@ class ClientIpResolverTest {
     }
 
     @Test
+    void repeatedHeaderLinesCannotHideTheProxyAppendedClient() {
+        var request = request("10.10.0.1", "105.127.6.174");
+        request.addHeader("X-Forwarded-For", "198.51.100.9");
+        assertThat(resolver(List.of("10.10.0.1")).resolve(request).toString())
+                .isEqualTo("198.51.100.9");
+    }
+
+    @Test
+    void trailingEmptyHopFailsClosed() {
+        assertThat(resolver(List.of("10.10.0.1"))
+                .resolve(request("10.10.0.1", "105.127.6.174,"))).isNull();
+    }
+
+    @Test
     void blankRemoteAddressFailsSafe() {
         ClientIpResolver resolver = resolver(List.of());
 

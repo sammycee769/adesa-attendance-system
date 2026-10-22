@@ -66,14 +66,14 @@ export function readCookie(name: string): string | null {
 }
 
 let csrfRequest: Promise<void> | null = null;
+let csrfToken: string | null = null;
 
 /**
- * Makes sure the browser holds a CSRF token. The backend writes it to the
- * `XSRF-TOKEN` cookie; the token is only usable together with the session
- * cookie, so it is fetched once and reused.
+ * Fetches the CSRF token as JSON because frontend JavaScript cannot read a
+ * backend-origin cookie. The browser sends that cookie with the echoed header.
  */
 export async function ensureCsrfToken(): Promise<void> {
-  if (readCookie(CSRF_COOKIE_NAME)) {
+  if (csrfToken || readCookie(CSRF_COOKIE_NAME)) {
     return;
   }
   if (!csrfRequest) {
@@ -82,10 +82,15 @@ export async function ensureCsrfToken(): Promise<void> {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     })
-      .then((response) => {
+      .then(async (response) => {
         if (!response.ok) {
           throw new ApiError(response.status, 'The session could not be initialised.');
         }
+        const body = await response.json() as { token?: string };
+        if (!body.token) {
+          throw new ApiError(0, 'The session could not be initialised.');
+        }
+        csrfToken = body.token;
       })
       .finally(() => {
         csrfRequest = null;
@@ -97,6 +102,7 @@ export async function ensureCsrfToken(): Promise<void> {
 /** Drops the cached CSRF bootstrap (after a login, the token changes). */
 export function resetCsrfBootstrap(): void {
   csrfRequest = null;
+  csrfToken = null;
 }
 
 export interface RequestOptions {
@@ -209,7 +215,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
   if (method !== 'GET') {
     await ensureCsrfToken();
-    const token = readCookie(CSRF_COOKIE_NAME);
+    const token = csrfToken ?? readCookie(CSRF_COOKIE_NAME);
     if (token) {
       headers[CSRF_HEADER_NAME] = token;
     }

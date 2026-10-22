@@ -5,20 +5,65 @@ import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Zoho Mail (or any SMTP) configuration, read entirely from environment
+ * Zoho HTTPS API or SMTP configuration, read entirely from environment
  * variables so no credential is ever committed.
  *
  * <p>Port 465 uses implicit TLS ({@code MAIL_SMTP_SSL_ENABLE=true},
  * {@code MAIL_SMTP_STARTTLS_ENABLE=false}); port 587 uses STARTTLS
  * ({@code MAIL_SMTP_SSL_ENABLE=false}, {@code MAIL_SMTP_STARTTLS_ENABLE=true}).
  *
- * <p>When {@code host} is blank the application does not build an SMTP sender
- * at all and falls back to a logging stub, so a development or test run can
- * never send a real message.
+ * <p>With the SMTP provider and a blank host, development uses a logging stub.
+ * Production requires a configured provider. Selecting Zoho API always requires
+ * complete OAuth configuration and never falls back to logging.
  */
 @Validated
 @ConfigurationProperties(prefix = "adesa.mail")
 public class MailProperties {
+
+    public enum Provider { SMTP, ZOHO_API }
+
+    public enum ZohoDataCenter {
+        US("zoho.com"), EU("zoho.eu"), IN("zoho.in"), AU("zoho.com.au"),
+        JP("zoho.jp"), CA("zohocloud.ca"), CN("zoho.com.cn"), AE("zoho.ae"), SA("zoho.sa");
+
+        private final String domain;
+
+        ZohoDataCenter(String domain) { this.domain = domain; }
+        public String mailOrigin() { return "https://mail." + domain; }
+        public String accountsOrigin() { return "https://accounts." + domain; }
+    }
+
+    public static class Zoho {
+        private ZohoDataCenter dataCenter;
+        private String accountId = "";
+        private String clientId = "";
+        private String clientSecret = "";
+        private String refreshToken = "";
+
+        public ZohoDataCenter getDataCenter() { return dataCenter; }
+        public void setDataCenter(ZohoDataCenter value) { dataCenter = value; }
+        public String getAccountId() { return accountId; }
+        public void setAccountId(String value) { accountId = value; }
+        public String getClientId() { return clientId; }
+        public void setClientId(String value) { clientId = value; }
+        public String getClientSecret() { return clientSecret; }
+        public void setClientSecret(String value) { clientSecret = value; }
+        public String getRefreshToken() { return refreshToken; }
+        public void setRefreshToken(String value) { refreshToken = value; }
+
+        public boolean isConfigured() {
+            return dataCenter != null && accountId != null && accountId.matches("[0-9]+")
+                    && StringUtils.hasText(clientId) && StringUtils.hasText(clientSecret)
+                    && StringUtils.hasText(refreshToken);
+        }
+    }
+
+    private Provider provider = Provider.SMTP;
+    private final Zoho zoho = new Zoho();
+
+    public Provider getProvider() { return provider; }
+    public void setProvider(Provider value) { provider = value; }
+    public Zoho getZoho() { return zoho; }
 
     /** SMTP host, e.g. {@code smtp.zoho.com} (data-centre specific). */
     private String host = "";
@@ -38,9 +83,10 @@ public class MailProperties {
 
     private boolean sslEnable = false;
 
-    /** True when a real SMTP transport should be built. */
+    /** True when the selected delivery provider has its required configuration. */
     public boolean isConfigured() {
-        return StringUtils.hasText(host) && StringUtils.hasText(from);
+        return StringUtils.hasText(from) && (provider == Provider.ZOHO_API
+                ? zoho.isConfigured() : provider == Provider.SMTP && StringUtils.hasText(host));
     }
 
     public String getHost() {

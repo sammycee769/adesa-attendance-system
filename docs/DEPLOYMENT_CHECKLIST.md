@@ -24,25 +24,30 @@ Legend:
 | # | Item | Status | How to verify | Owner |
 |---|---|---|---|---|
 | 1.1 | The allowlist is configuration, not code (`attendance.network.allowed-ipv4` ← `ATTENDANCE_ALLOWED_IPV4`) | [A] | `OfficeNetworkPolicyTest`; grep the source for a hard-coded address | Dev |
-| 1.2 | Default value is the ADESA HQ public IPv4 `105.127.6.174/32` | [A] | `application.yml`, `.env.example` | Dev |
+| 1.2 | No production office CIDR is assumed or defaulted; ADESA IT supplies the verified Render-resolved office egress | [A] + [M] | `application-prod.yml`, authenticated diagnostics from office Wi-Fi | ADESA IT |
 | 1.3 | Enforcement is **off** by default and never enabled implicitly | [A] | `ProductionSafetyValidatorTest` (`prodProfileDoesNotEnableEnforcementByDefault`) | Dev |
 | 1.4 | The `prod` profile refuses to start without enforcement + an allowlist | [A] | `ProductionSafetyValidatorTest` | Dev |
 | 1.4a | A disabled policy **fails closed** (HTTP 403) when no explicit local-development bypass is set | [A] | `AttendanceNetworkFailClosedTest`, `AttendanceNetworkGuardTest.disabledPolicyWithoutBypassFailsClosed` | Dev |
 | 1.4b | The `prod` profile refuses to start when the local-development bypass is set | [A] | `ProductionSafetyValidatorTest.prodWithLocalDevelopmentBypassFails` | Dev |
-| 1.5 | No private/laptop/link-local address is on the allowlist | [A] | `OfficeNetworkPolicyTest.theOfficePublicAddressIsTheOnlyApprovedAddress` | Dev |
+| 1.5 | No private/laptop/link-local address is on the allowlist | [A] | `OfficeNetworkPolicyTest.onlyConfiguredTestAddressIsApproved` | Dev |
 | 1.6 | The application runs on a public cloud server with HTTPS only | [M] | Certificate, TLS termination, redirect to HTTPS | ADESA IT |
 | 1.7 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ALLOWED_ORIGINS` match the deployed domain | [M] | Passkey registration from the deployed domain | ADESA IT |
 | 1.8 | Database user is least-privilege, backups run and a restore was tested | [M] | `pg_dump` + restore rehearsal | ADESA IT |
-| 1.9 | The built frontend is served from the same origin as the API, with an SPA fallback to `index.html` and `/api` forwarded to the backend | [M] | `npm run build` → `frontend/dist`; open `/device` directly and reload a deep link | ADESA IT |
+| 1.9 | The Vercel frontend uses the actual backend origin, exact CORS, secure cookies and SPA fallback | [M] | `VITE_API_BASE_URL` is the backend origin; verify login, CSRF and reload `/device` | ADESA IT |
 | 1.10 | The frontend build is reproducible (`npm ci && npm run build`) and the type check passes | [A] | `npm run typecheck`, `npm run build`, `npm test` | Dev |
 | 1.11 | The development database is bound to loopback and has **no default password** (`POSTGRES_PASSWORD` is required) | [A] | `docker-compose.yml` | Dev |
-| 1.12 | `.env` and the security log are not world-readable, and no development password is committed | [A] | `dev.sh` (`chmod 600`/`640`, no password literal), `.env.example` | Dev |
+| 1.12 | `.env` is not world-readable and no development password is committed; production security logs go to stderr | [A] | `dev.sh`, `.env.example`, logging configuration test | Dev |
 | 1.13 | The edge sends `Strict-Transport-Security`; plain HTTP is redirected | [M] | `curl -sI https://…` and `curl -sI http://…` | ADESA IT |
 | 1.14 | A database backup was taken **and restored into a scratch database** with matching counts and Flyway history | [A] + [M] | Rehearsal record in `docs/OPERATIONS_RUNBOOK.md` §7.3; repeat on production | ADESA IT |
 | 1.15 | The `prod` profile refuses to start with the development database password, a non-`Secure` session cookie, or a placeholder/insecure WebAuthn configuration | [A] | `ProductionSafetyValidatorTest` | Dev |
 | 1.16 | The allowlist cannot be broader than a `/24`, and trusted proxies must be single `/32` host addresses | [A] | `ProductionSafetyValidatorTest.prodWithOverBroadCidrFails`, `…prodWithTrustedProxyRangeFails` | Dev |
 | 1.17 | The local-development bypass is refused unless the `dev` profile is explicitly active | [A] | `ProductionSafetyValidatorTest.bypassWithoutDevProfileFails` | Dev |
 | 1.18 | A compromised e-mail address can no longer lock an account out globally (login limiting is per account **and** client address, and its state is bounded) | [A] | `LoginRateLimiterTest.trackedKeysAreBounded`, `AuthControllerTest` | Dev |
+| 1.19 | Production datasource requires an explicit Supabase JDBC URL, username, password and TLS | [A] + [M] | Production configuration test; connect and migrate a scratch Supabase database | ADESA IT |
+| 1.20 | Render Docker build context is `backend`, container binds to Render `PORT`, health check is `/actuator/health` | [A] + [M] | Dockerfile review; Render service settings and health check | ADESA IT |
+| 1.21 | CI runs backend tests and frontend typecheck, tests and production build | [A] | `.github/workflows/ci.yml` | Dev |
+| 1.22 | SMTP requires authentication, credentials, and a TLS mode matching the Zoho port | [A] + [M] | `ProductionSafetyValidatorTest`; verify real Zoho delivery | ADESA IT |
+| 1.23 | Render deploys only after CI passes; frontend edge routing and SPA fallback are configured | [M] | Render auto-deploy/CI settings; Vercel/edge routing test | ADESA IT |
 
 ## 2. Office-network enforcement (the production gate)
 
@@ -57,9 +62,9 @@ Legend:
 | 2.7 | Denied attempts are written to the restricted security log (client IP, timestamp, reason) | [A] | `…deniedAttemptIsWrittenToTheSecurityLog` | Dev |
 | 2.8 | **Hosting topology identified**: direct exposure or platform load balancer / reverse proxy in front of the application | [M] | Cloud console / provider documentation | ADESA IT |
 | 2.9 | **Trusted proxy addresses configured** — only if 2.8 shows a proxy. Never invented | [M] | `ATTENDANCE_TRUSTED_PROXY_ADDRESSES` + diagnostics endpoint | ADESA IT |
-| 2.10 | **Resolved client IP confirmed from ADESA HQ Wi-Fi** — the diagnostics endpoint must report `105.127.6.174` | [M] | `GET /api/v1/admin/network/client-address` from HQ Wi-Fi | ADESA IT |
-| 2.11 | **External hotspot denied** — the same request from a mobile hotspot must be refused with HTTP 403 | [M] | `POST /api/v1/attendance/sign-in` from a hotspot | ADESA IT |
-| 2.12 | Security log file permissions restricted to the operations/IT account | [M] | `ls -l logs/security.log`, group/ACL review | ADESA IT |
+| 2.10 | **Resolved client IP confirmed from ADESA HQ Wi-Fi** — match the verified office egress address; do not assume a previously observed public IP | [M] | Authenticated `GET /api/v1/admin/network/client-address` with canary allowlist | ADESA IT |
+| 2.11 | **Hotspot path differs and is unapproved** — confirm the resolved address differs from office and is outside the final narrow CIDR | [M] | Authenticated diagnostics from mobile hotspot, before enabling real attendance | ADESA IT |
+| 2.12 | Production security events are captured from stderr with access restricted to authorized operators | [A] + [M] | Logging configuration test and Render log access review | ADESA IT |
 | 2.13 | Enforcement enabled in production **after** 2.10 and 2.11 succeeded | [M] | `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true` + restart | ADESA IT |
 
 ## 3. Additional security layers (network edge)
@@ -100,7 +105,8 @@ Legend:
 | 4.21 | An authorized administrator can reactivate a deactivated administrator; unauthorized callers cannot | [A] | `EmployeeServiceTest.reactivateInactiveAdmin`, `AdminEmployeeControllerTest.administratorCanBeReactivated`, `…reactivationRequiresAdminRole` | Dev |
 | 4.22 | The system cannot be left without an active administrator (last active admin cannot be demoted) | [A] | `EmployeeServiceTest.lastActiveAdminRoleChangeIsRejected` | Dev |
 | 4.23 | Reactivation only flips the active flag — historical attendance records are untouched | [A] | `AdminEmployeeControllerTest.administratorCanBeReactivated` | Dev |
-| 4.24 | An inactive administrator does not block the controlled bootstrap recovery path | [A] | `FirstAdminBootstrapTest.bootstrapCreatesAdminWhenOnlyAdminIsInactive` | Dev |
+| 4.24 | An inactive administrator or prior bootstrap audit prevents repeat bootstrap | [A] | `FirstAdminBootstrapTest.inactiveAdminBlocksBootstrap` | Dev |
+| 4.24a | The bootstrap admin password follows the configured password policy and is forced to change before using the app | [A] | `FirstAdminBootstrapTest` | Dev |
 | 4.25 | The `XSRF-TOKEN` cookie is `Secure` and `SameSite=Lax` when the session cookie is secure (including behind a TLS-terminating proxy) | [A] | `SecurityConfigTest` | Dev |
 | 4.26 | API responses carry `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options: DENY` and a restrictive CSP | [A] | `SecurityConfigTest` | Dev |
 | 4.27 | The SPA request client has a deadline; a stalled backend shows an error instead of hanging forever | [A] | `client.test.ts` (timeout test) | Dev |

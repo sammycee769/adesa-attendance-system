@@ -103,6 +103,24 @@ public class AdminAttendanceController {
                 .body(pdf);
     }
 
+    @GetMapping("/export.csv")
+    @PreAuthorize("hasAnyRole('HR','ADMIN')")
+    @Operation(summary = "Export attendance records as CSV")
+    public ResponseEntity<byte[]> exportCsv(
+            @RequestParam(required = false) UUID employeeId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) AttendanceState status) {
+        var filter = new AttendanceReportFilter(employeeId, search, from, to, status);
+        byte[] csv = AttendanceCsvWriter.write(attendanceReportService.listForExport(filter));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"adesa-attendance.csv\"")
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .contentLength(csv.length)
+                .body(csv);
+    }
+
     @PatchMapping("/{id}")
     @PreAuthorize("hasAnyRole('HR','ADMIN')")
     @Operation(summary = "Correct an attendance record",

@@ -1,0 +1,31 @@
+# Render > existing service > Environment > Add from .env.
+# Populate blank values privately before saving/redeploying.
+# Rotate the exposed database password first. Never use this file for real secrets.
+SPRING_PROFILES_ACTIVE=prod
+APP_PUBLIC_URL=https://adesa-attendance-frontend.vercel.app
+WEBAUTHN_RP_ID=adesa-attendance-frontend.vercel.app
+WEBAUTHN_ALLOWED_ORIGINS=https://adesa-attendance-frontend.vercel.app
+WEBAUTHN_USER_VERIFICATION_REQUIRED=true
+SESSION_COOKIE_SAME_SITE=none
+ATTENDANCE_TIMEZONE=Africa/Lagos
+ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true
+ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false
+# Provisional; validate through the hosted path before admitting attendance.
+ATTENDANCE_ALLOWED_IPV4=105.127.6.174/32
+# Leave empty until the exact stable proxy hosts and header behavior are verified.
+ATTENDANCE_TRUSTED_PROXY_ADDRESSES=
+ATTENDANCE_CLIENT_IP_HEADER=X-Forwarded-For
+# Supabase Connect > Session pooler > exact host/username, JDBC URL, port 5432.
+# Prefer verify-full TLS with the endpoint's CA file; see PRODUCTION_HANDOVER.md.
+DB_URL=
+DB_USERNAME=
+DB_PASSWORD=
+# HTTPS delivery on Render free; see ZOHO_MAIL_API_SETUP.md.
+MAIL_PROVIDER=zoho-api
+MAIL_FROM=
+ZOHO_DATA_CENTER=
+ZOHO_MAIL_ACCOUNT_ID=
+ZOHO_CLIENT_ID=
+ZOHO_CLIENT_SECRET=
+ZOHO_REFRESH_TOKEN=
+# No ADESA_BOOTSTRAP_ADMIN_* values during initial deployment.

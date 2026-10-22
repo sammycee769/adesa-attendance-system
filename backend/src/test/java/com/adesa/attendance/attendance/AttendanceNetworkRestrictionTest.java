@@ -42,10 +42,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * The office-network restriction applied to attendance actions.
  *
- * <p>The approved office network is the ADESA HQ public address supplied by
- * ADESA ({@code 105.127.6.174/32}). No trusted reverse proxy is configured yet,
- * so the direct peer address is authoritative and forwarded headers are
- * ignored.
+ * <p>The configured office address in this test is a TEST-NET-2 fixture
+ * ({@code 198.51.100.174/32}), not an ADESA egress address. No trusted reverse
+ * proxy is configured, so the direct peer address is authoritative and
+ * forwarded headers are ignored.
  *
  * <p>The tests prove that the backend enforces exactly the configured CIDR:
  * the office address is accepted, every other address is refused, a request
@@ -59,9 +59,9 @@ class AttendanceNetworkRestrictionTest {
 
     private static final String PASSWORD = "network-password-1";
 
-    /** The ADESA HQ office public address, as supplied by ADESA. */
-    private static final String OFFICE_PUBLIC_ADDRESS = "105.127.6.174";
-    private static final String APPROVED_CIDR = "105.127.6.174/32";
+    /** Documentation-only IPv4 address used to simulate the approved network. */
+    private static final String OFFICE_PUBLIC_ADDRESS = "198.51.100.174";
+    private static final String APPROVED_CIDR = "198.51.100.174/32";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -190,7 +190,7 @@ class AttendanceNetworkRestrictionTest {
 
         mockMvc.perform(post("/api/v1/attendance/sign-in")
                         .session(session)
-                        .with(from("105.127.6.175"))
+                        .with(from("198.51.100.175"))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(AttendanceTestFixtures.proofBody(proofId))))
@@ -200,7 +200,7 @@ class AttendanceNetworkRestrictionTest {
     }
 
     @Test
-    @DisplayName("A private laptop address is rejected (only the office public address is approved)")
+    @DisplayName("A private laptop address is rejected (only the configured test address is approved)")
     void signInFromAPrivateLaptopAddressRejected() throws Exception {
         UUID employeeId = fixtures.createEmployee(true, PASSWORD);
         MockHttpSession session = login(employeeId);

@@ -1,6 +1,7 @@
 package com.adesa.attendance.auth;
 
 import com.adesa.attendance.auth.dto.CurrentUserResponse;
+import java.util.Map;
 import com.adesa.attendance.auth.dto.LoginRequest;
 
 import org.springframework.http.HttpStatus;
@@ -34,19 +35,15 @@ public class AuthController {
         this.authService = authService;
     }
 
-    /**
-     * Establishes the CSRF cookie for the SPA. The cookie is HTML-readable
-     * (not HttpOnly) so JavaScript can echo it as the {@code X-XSRF-TOKEN}
-     * header; the server never trusts it without a matching session token.
-     */
+    /** Returns the raw header token to the exact CORS-allowed frontend origin. */
     @GetMapping("/csrf")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Obtain a CSRF token cookie",
-            description = "Sets the XSRF-TOKEN cookie and returns 204. Call before any state-changing request.")
-    public void csrf(CsrfToken csrfToken) {
-        // Touching the CsrfToken argument forces the token to be generated and
-        // written to the cookie repository by the CSRF filter.
-        csrfToken.getToken();
+    @Operation(summary = "Obtain a CSRF token and cookie")
+    public Map<String, String> csrf(HttpServletRequest request, HttpServletResponse response) {
+        // The XOR-masked request attribute is for form rendering, not the SPA
+        // header. Load the raw repository token (or generate it on first use).
+        CsrfToken token = (CsrfToken) request.getAttribute("adesa.rawCsrfToken");
+        response.setHeader("Cache-Control", "no-store");
+        return Map.of("token", token.getToken());
     }
 
     @PostMapping("/login")
