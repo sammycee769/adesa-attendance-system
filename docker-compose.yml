@@ -1,0 +1,56 @@
+# DEVELOPMENT ONLY.
+# Starts a local PostgreSQL for development and testing.
+# Never use these default credentials outside local development.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: adesa-attendance-postgres
+    environment:
+      POSTGRES_DB: adesa_attendance
+      POSTGRES_USER: adesa_app
+      # No default: a missing password is a startup error, not a known
+      # credential. Set POSTGRES_PASSWORD in .env (see .env.example).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      # Loopback only: the development database must never be reachable from
+      # the LAN. Override with POSTGRES_PORT in .env if 5432 is taken.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - adesa_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adesa_app -d adesa_attendance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # DEVELOPMENT ONLY - optional frontend development server.
+  # Start it with: docker compose --profile frontend up -d
+  # The plain `docker compose up -d` starts PostgreSQL only.
+  frontend:
+    profiles: ["frontend"]
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      # The dev server proxies /api to the backend; inside the container the
+      # backend runs on the host.
+      BACKEND_URL: http://host.docker.internal:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      # Loopback only: the raw source tree and HMR socket are for the
+      # developer's machine, not for the LAN.
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  adesa_pgdata:
+  frontend_node_modules:

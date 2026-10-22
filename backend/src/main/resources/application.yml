@@ -1,0 +1,171 @@
+spring:
+  application:
+    name: adesa-attendance
+  # The application uses its own session-based authentication. Without this
+  # exclusion Spring Boot creates an unused in-memory user and prints a
+  # generated password to the log; the account is unreachable (form login and
+  # HTTP Basic are disabled) but the credential should not appear in logs.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    # PLACEHOLDER: real values supplied by ADESA IT via environment variables.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/adesa_attendance}
+    username: ${DB_USERNAME:adesa_app}
+    password: ${DB_PASSWORD:adesa_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      # Never rely on the server default timezone implicitly.
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  servlet:
+    session:
+      # Idle timeout: how long a session survives without activity.
+      timeout: ${SESSION_IDLE_TIMEOUT:30m}
+      cookie:
+        name: JSESSIONID
+        http-only: true
+        same-site: lax
+        # Must be true in production (HTTPS only).
+        secure: ${SESSION_COOKIE_SECURE:false}
+  # Do not leak stack traces or internals in error responses.
+  error:
+    include-stacktrace: never
+    include-message: never
+  # Forwarded headers are NOT handled by Spring's FRAMEWORK strategy: that
+  # would blindly trust X-Forwarded-For from any source. Instead the
+  # office-network policy resolves the client address itself and only trusts
+  # headers from configured trusted proxies (attendance.trusted-proxy-addresses).
+  forward-headers-strategy: NONE
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      # Never expose component details (DB host, etc.) publicly.
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /api/v1/openapi.json
+  swagger-ui:
+    path: /api/v1/swagger-ui.html
+
+# ---------------------------------------------------------------------------
+# Attendance configuration.
+# ---------------------------------------------------------------------------
+attendance:
+  # Timezone that defines the attendance workday and the displayed timestamps.
+  # Africa/Lagos is the ADESA HQ location; never derived from the server's
+  # default timezone and never from the employee's device clock.
+  timezone: ${ATTENDANCE_TIMEZONE:Africa/Lagos}
+  network:
+    # Master switch for the office-network restriction. It is NEVER enabled
+    # implicitly: the 'prod' profile refuses to start while it is off, so an
+    # operator has to switch it on deliberately after the client address has
+    # been verified (README).
+    enforcement-enabled: ${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
+    # Explicit local-development override. OFF by default: when enforcement is
+    # disabled and this is not set, attendance actions FAIL CLOSED (HTTP 403).
+    # Refused whenever the 'prod' profile is active.
+    local-development-bypass: ${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}
+    # Approved office egress addresses (IPv4 only), supplied by ADESA IT.
+    # The default is the confirmed ADESA HQ public IPv4 address.
+    allowed-ipv4: ${ATTENDANCE_ALLOWED_IPV4:105.127.6.174/32}
+    # Reverse proxies whose forwarding headers may be trusted. EMPTY until the
+    # hosting topology is confirmed: never invent these addresses. When a
+    # platform load balancer sits in front of the application, its address (or
+    # range) must be configured here, otherwise the forwarded client address is
+    # ignored and every office request is refused.
+    trusted-proxies: ${ATTENDANCE_TRUSTED_PROXY_ADDRESSES:}
+    # Header carrying the forwarded client address; only honoured when the
+    # direct peer is a configured trusted proxy.
+    client-ip-header: ${ATTENDANCE_CLIENT_IP_HEADER:X-Forwarded-For}
+
+# ---------------------------------------------------------------------------
+# Authentication / session policy (Phase 3).
+# ---------------------------------------------------------------------------
+auth:
+  # Absolute session lifetime, enforced by a filter (Spring only does idle).
+  session-absolute-timeout: ${SESSION_ABSOLUTE_TIMEOUT:12h}
+  # Failed password attempts per email **and source address** within the
+  # window before HTTP 429. Keying by source address prevents an unauthenticated
+  # attacker from locking an account out globally.
+  login-max-failures: ${LOGIN_MAX_FAILURES:5}
+  login-window: ${LOGIN_WINDOW:15m}
+  # Bound on the in-memory limiter's key set (memory protection against a flood
+  # of distinct e-mail addresses).
+  login-max-tracked-keys: ${LOGIN_MAX_TRACKED_KEYS:10000}
+  # Single-use ceremony lifetimes.
+  webauthn-challenge-ttl: ${WEBAUTHN_CHALLENGE_TTL:2m}
+  device-proof-ttl: ${DEVICE_PROOF_TTL:2m}
+
+# ---------------------------------------------------------------------------
+# WebAuthn / passkey settings.
+# rp-id and allowed-origins MUST match the deployed domain (Phase 3).
+# ---------------------------------------------------------------------------
+webauthn:
+  rp-id: ${WEBAUTHN_RP_ID:localhost}
+  rp-name: ${WEBAUTHN_RP_NAME:ADESA HQ Attendance}
+  allowed-origins: ${WEBAUTHN_ALLOWED_ORIGINS:http://localhost:5173}
+  # Requested as "preferred"; set true to require biometric/PIN (user verification).
+  user-verification-required: ${WEBAUTHN_USER_VERIFICATION_REQUIRED:false}
+
+# ---------------------------------------------------------------------------
+# Controlled first-administrator bootstrap and account/mail settings.
+# Leave the bootstrap values empty in normal operation.
+# See README ("Creating the first administrator").
+# ---------------------------------------------------------------------------
+adesa:
+  account:
+    # Public base URL of the deployed frontend. Absolute setup/recovery links
+    # are built ONLY from this value, never from the incoming Host header.
+    # The 'prod' profile requires an HTTPS value that matches a WebAuthn origin.
+    public-url: ${APP_PUBLIC_URL:http://localhost:5173}
+    # Emailed link lifetimes (single-use).
+    setup-token-ttl: ${ACCOUNT_SETUP_TOKEN_TTL:48h}
+    recovery-token-ttl: ${ACCOUNT_RECOVERY_TOKEN_TTL:30m}
+    # Password policy, enforced identically on the server and in the UI.
+    password-min-length: ${PASSWORD_MIN_LENGTH:12}
+    password-max-length: ${PASSWORD_MAX_LENGTH:128}
+    # Rate limit for the public recovery endpoints (per client address).
+    recovery-max-attempts: ${RECOVERY_MAX_ATTEMPTS:5}
+    recovery-window: ${RECOVERY_WINDOW:15m}
+  # Zoho Mail (or any SMTP) delivery. Leave MAIL_HOST empty to disable delivery
+  # completely (development/tests log the message instead of sending it).
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:}
+    smtp-auth: ${MAIL_SMTP_AUTH:true}
+    starttls-enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
+    ssl-enable: ${MAIL_SMTP_SSL_ENABLE:false}
+  bootstrap:
+    admin:
+      employee-number: ${ADESA_BOOTSTRAP_ADMIN_EMPLOYEE_NUMBER:}
+      full-name: ${ADESA_BOOTSTRAP_ADMIN_FULL_NAME:}
+      email: ${ADESA_BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${ADESA_BOOTSTRAP_ADMIN_PASSWORD:}

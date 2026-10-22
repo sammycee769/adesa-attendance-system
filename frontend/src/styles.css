@@ -1,0 +1,455 @@
+/*
+ * ADESA HQ Attendance - simple, consistent and responsive styles.
+ *
+ * Colours meet the WCAG AA contrast requirements, the layout works on a
+ * phone (the attendance is recorded on phones) and every interactive element
+ * keeps a visible focus indicator.
+ */
+
+:root {
+  --color-bg: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-text: #16212b;
+  --color-muted: #55636f;
+  --color-border: #d3dae0;
+  --color-primary: #0b5cab;
+  --color-primary-dark: #084682;
+  --color-success: #14663c;
+  --color-success-bg: #e6f4ec;
+  --color-error: #a01b1b;
+  --color-error-bg: #fdecec;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(16, 33, 43, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.75rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  background: #0f1024;
+  color: #ffffff;
+}
+
+.app-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+}
+
+.app-title {
+  align-items: center;
+  color: #ffffff;
+  display: flex;
+  font-size: 1.1rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.app-title-logo {
+  height: 40px;
+  max-height: 40px;
+  width: auto;
+}
+
+.app-nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.app-nav a {
+  color: #dce8f5;
+  text-decoration: none;
+  padding: 0.25rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.app-nav a.active {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
+}
+
+.app-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.app-user {
+  font-size: 0.9rem;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.app-footer {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------- cards */
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+
+.subtitle {
+  color: var(--color-muted);
+  margin-top: -0.5rem;
+}
+
+.definition-list {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+}
+
+.definition-list dt {
+  color: var(--color-muted);
+}
+
+.definition-list dd {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .definition-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.attendance-summary {
+  margin-bottom: 1rem;
+}
+
+.attendance-summary p {
+  margin: 0.2rem 0;
+}
+
+.label {
+  color: var(--color-muted);
+}
+
+.hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.page-status {
+  color: var(--color-muted);
+}
+
+/* ----------------------------------------------------------------- buttons */
+
+.button {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0.55rem 1.1rem;
+  text-decoration: none;
+}
+
+.button:focus-visible {
+  outline: 3px solid #0b5cab;
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.button-primary {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.button-secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* ------------------------------------------------------------------- forms */
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.form-field label {
+  font-weight: 600;
+}
+
+.form-field input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+}
+
+.form-field input:focus-visible {
+  border-color: var(--color-primary);
+  outline: 3px solid rgba(11, 92, 171, 0.35);
+}
+
+.form-field select,
+.button-row select {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 1rem;
+  min-height: 44px;
+  padding: 0.4rem 0.5rem;
+}
+
+.form-field select:focus-visible,
+.button-row select:focus-visible {
+  border-color: var(--color-primary);
+  outline: 3px solid rgba(11, 92, 171, 0.35);
+}
+
+/* ------------------------------------------------------- report and filters */
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 1rem;
+}
+
+.section-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+.pagination {
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.cell-note {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.cell-details {
+  max-width: 28rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.auth-page {
+  background: #ffffff;
+  display: flex;
+  justify-content: center;
+  padding: 3rem 1rem;
+}
+
+.auth-card {
+  background: #ffffff;
+  max-width: 26rem;
+  width: 100%;
+}
+
+.login-hero {
+  align-self: center;
+  display: block;
+  height: auto;
+  max-height: 200px;
+  max-width: 100%;
+  object-fit: contain;
+  width: auto;
+}
+
+/* ----------------------------------------------------------------- banners */
+
+.banner {
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.banner p {
+  margin: 0;
+}
+
+.banner-hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin-top: 0.35rem !important;
+}
+
+.banner-error {
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+}
+
+.banner-success {
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success);
+  color: var(--color-success);
+}
+
+.banner-warning {
+  background: var(--color-warning-bg, #fff6e5);
+  border: 1px solid var(--color-warning, #b7791f);
+  color: var(--color-warning, #b7791f);
+}
+
+/* ------------------------------------------------------------------ badges */
+
+.badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+}
+
+.badge-not-signed-in,
+.badge-device-none,
+.badge-device-revoked,
+.badge-device-replaced {
+  background: #eceff2;
+  color: var(--color-muted);
+}
+
+.badge-signed-in,
+.badge-device-approved {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.badge-signed-out,
+.badge-device-pending-approval {
+  background: #fff4e0;
+  color: #8a5300;
+}
+
+/* ------------------------------------------------------------------ tables */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

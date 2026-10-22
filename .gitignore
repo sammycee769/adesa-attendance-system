@@ -1,0 +1,13 @@
+# Local configuration and secrets — never commit
+.env
+.env.local
+
+# Restricted security log (client addresses of denied attempts)
+logs/
+*.log
+
+# Build output
+backend/target/
+frontend/dist/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
