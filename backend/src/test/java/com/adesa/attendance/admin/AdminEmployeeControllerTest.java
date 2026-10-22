@@ -106,7 +106,7 @@ class AdminEmployeeControllerTest {
                                 "employeeNumber", number,
                                 "fullName", "Test Person",
                                 "email", email,
-                                "password", "a-very-strong-pass",
+                                "password", "a-very-strong-pass1",
                                 "role", role.name()))))
                 .andExpect(status().isCreated())
                 .andReturn();
@@ -151,7 +151,7 @@ class AdminEmployeeControllerTest {
                                 "employeeNumber", "HR-TRY-1",
                                 "fullName", "Should Not Work",
                                 "email", "should.not.work@adesa.test",
-                                "password", "a-very-strong-pass",
+                                "password", "a-very-strong-pass1",
                                 "role", "EMPLOYEE"))))
                 .andExpect(status().isForbidden());
 
@@ -174,7 +174,7 @@ class AdminEmployeeControllerTest {
                                 "employeeNumber", "EMP-100",
                                 "fullName", "Ada Obi",
                                 "email", "Ada.Obi@Adesa.test",
-                                "password", "a-very-strong-pass",
+                                "password", "a-very-strong-pass1",
                                 "role", "EMPLOYEE"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.employeeNumber").value("EMP-100"))
@@ -197,7 +197,7 @@ class AdminEmployeeControllerTest {
                                 "employeeNumber", "EMP-101",
                                 "fullName", "Copy",
                                 "email", "two@adesa.test",
-                                "password", "a-very-strong-pass",
+                                "password", "a-very-strong-pass1",
                                 "role", "EMPLOYEE"))))
                 .andExpect(status().isConflict());
 
@@ -209,7 +209,7 @@ class AdminEmployeeControllerTest {
                                 "employeeNumber", "EMP-102",
                                 "fullName", "Copy",
                                 "email", "ONE@adesa.test",
-                                "password", "a-very-strong-pass",
+                                "password", "a-very-strong-pass1",
                                 "role", "EMPLOYEE"))))
                 .andExpect(status().isConflict());
     }
@@ -217,6 +217,7 @@ class AdminEmployeeControllerTest {
     @Test
     @DisplayName("Validation failures return 400 with field errors")
     void validationFailuresReturnFieldErrors() throws Exception {
+        String tooLongPassword = "A1".repeat(65);
         mockMvc.perform(post("/api/v1/admin/employees")
                         .with(authentication(asAdmin()))
                         .with(csrf())
@@ -225,7 +226,7 @@ class AdminEmployeeControllerTest {
                                 "employeeNumber", " ",
                                 "fullName", "Bad",
                                 "email", "not-an-email",
-                                "password", "short",
+                                "password", tooLongPassword,
                                 "role", "EMPLOYEE"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[?(@.field == 'email')]").exists())
@@ -249,7 +250,7 @@ class AdminEmployeeControllerTest {
                         .with(authentication(asAdmin()))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"role\":\"HR\",\"isActive\":false,\"password\":\"another-strong-pass\"}"))
+                        .content("{\"role\":\"HR\",\"isActive\":false,\"password\":\"another-strong-pass1\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("HR"))
                 .andExpect(jsonPath("$.isActive").value(false));
@@ -263,7 +264,7 @@ class AdminEmployeeControllerTest {
         // The stored password hash must have changed and never equal the plaintext.
         String hash = jdbcTemplate.queryForObject(
                 "SELECT password_hash FROM employees WHERE id = ?", String.class, id);
-        assertThat(hash).isNotBlank().isNotEqualTo("another-strong-pass");
+        assertThat(hash).isNotBlank().isNotEqualTo("another-strong-pass1");
     }
 
     @Test

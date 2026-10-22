@@ -16,6 +16,8 @@ import java.util.UUID;
 
 import com.adesa.attendance.audit.AuditAction;
 import com.adesa.attendance.audit.AuditService;
+import com.adesa.attendance.accounttoken.AccountPasswordService;
+import com.adesa.attendance.accounttoken.PasswordPolicy;
 import com.adesa.attendance.common.BusinessRuleException;
 import com.adesa.attendance.common.ConflictException;
 import com.adesa.attendance.common.NotFoundException;
@@ -38,6 +40,8 @@ class EmployeeServiceTest {
     private EmployeeRepository repository;
     private PasswordEncoder passwordEncoder;
     private AuditService auditService;
+    private PasswordPolicy passwordPolicy;
+    private AccountPasswordService accountPasswordService;
     private EmployeeService service;
 
     @BeforeEach
@@ -45,7 +49,10 @@ class EmployeeServiceTest {
         repository = org.mockito.Mockito.mock(EmployeeRepository.class);
         passwordEncoder = org.mockito.Mockito.mock(PasswordEncoder.class);
         auditService = org.mockito.Mockito.mock(AuditService.class);
-        service = new EmployeeService(repository, passwordEncoder, auditService);
+        passwordPolicy = org.mockito.Mockito.mock(PasswordPolicy.class);
+        accountPasswordService = org.mockito.Mockito.mock(AccountPasswordService.class);
+        service = new EmployeeService(
+                repository, passwordEncoder, auditService, passwordPolicy, accountPasswordService);
         when(passwordEncoder.encode(any())).thenReturn("$2a$hashed");
     }
 
@@ -67,8 +74,10 @@ class EmployeeServiceTest {
                 UUID.randomUUID());
 
         verify(passwordEncoder).encode("super-secret-pass");
+        verify(passwordPolicy).enforce("super-secret-pass");
         ArgumentCaptor<Employee> captor = ArgumentCaptor.forClass(Employee.class);
         verify(repository).saveAndFlush(captor.capture());
+        verify(accountPasswordService).issueAccountSetup(eq(captor.getValue()), any());
         assertThat(captor.getValue().getEmail()).isEqualTo("john.doe@adesa.test");
         assertThat(captor.getValue().isActive()).isTrue();
         assertThat(response.email()).isEqualTo("john.doe@adesa.test");

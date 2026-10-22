@@ -29,12 +29,16 @@ class ProductionSafetyValidatorTest {
     private Environment environment;
     private AttendanceProperties properties;
     private WebAuthnProperties webAuthnProperties;
+    private AccountProperties accountProperties;
+    private MailProperties mailProperties;
 
     @BeforeEach
     void setUp() {
         environment = mock(Environment.class);
         properties = new AttendanceProperties();
         webAuthnProperties = new WebAuthnProperties();
+        accountProperties = new AccountProperties();
+        mailProperties = new MailProperties();
 
         // Safe production defaults for the checks added by the security review.
         when(environment.getProperty("spring.datasource.password"))
@@ -46,10 +50,15 @@ class ProductionSafetyValidatorTest {
         webAuthnProperties.setAllowedOrigins(new ArrayList<>(
                 List.of("https://attendance.adesa.example")));
         webAuthnProperties.setUserVerificationRequired(true);
+        accountProperties.setPublicUrl("https://attendance.adesa.example");
+        mailProperties.setHost("smtp.example.test");
+        mailProperties.setFrom("Attendance <noreply@example.test>");
+        mailProperties.setSmtpAuth(false);
     }
 
     private ProductionSafetyValidator validator() {
-        return new ProductionSafetyValidator(environment, properties, webAuthnProperties);
+        return new ProductionSafetyValidator(
+                environment, properties, webAuthnProperties, accountProperties, mailProperties);
     }
 
     private void prod() {
@@ -251,6 +260,32 @@ class ProductionSafetyValidatorTest {
         assertThatThrownBy(() -> validator().afterPropertiesSet())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("user-verification-required");
+    }
+
+    @Test
+    @DisplayName("Prod profile with an unsafe public URL fails startup")
+    void prodWithUnsafePublicUrlFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        accountProperties.setPublicUrl("http://attendance.adesa.example");
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("APP_PUBLIC_URL must use https");
+    }
+
+    @Test
+    @DisplayName("Prod profile without configured mail delivery fails startup")
+    void prodWithoutConfiguredMailFails() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("105.127.6.174/32"));
+        mailProperties.setHost("");
+
+        assertThatThrownBy(() -> validator().afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mail delivery is not configured");
     }
 
     @Test
