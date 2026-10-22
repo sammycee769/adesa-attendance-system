@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
  * Writes security events to the restricted security log.
  *
  * <p>The {@code SECURITY} logger is routed to its own appender (see
- * {@code logback-spring.xml}); the file must only be readable by the
- * operations/IT account and must not be shipped to a general log aggregator.
+ * {@code logback-spring.xml}). Production writes to stderr for platform
+ * capture; non-production writes to a separate restricted file.
  *
  * <p>Each entry carries the resolved client IP, the reason and the acting
  * employee. The timestamp is added by the log pattern. Nothing that is
@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SecurityEventLogger {
 
-    /** Logger name that the logging configuration routes to the security log. */
+    /** Logger name that the logging configuration routes to the security stream. */
     public static final String SECURITY_LOGGER_NAME = "SECURITY";
 
     private static final Logger securityLog = LoggerFactory.getLogger(SECURITY_LOGGER_NAME);

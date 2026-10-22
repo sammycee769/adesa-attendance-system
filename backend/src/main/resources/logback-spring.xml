@@ -2,20 +2,14 @@
 <!--
     Logging configuration.
 
-    Two streams:
-      * the application log (console, INFO) for diagnostics and operations;
-      * the SECURITY log (separate file) for denied attendance attempts and
-        other security events. The SECURITY logger does not propagate to the
-        application log, so the resolved client address stays in the
-        restricted file only.
-
-    The security log file must be readable by the operations/IT account only
-    (chmod 640, dedicated directory). Set SECURITY_LOG_FILE to move it.
+    Application logs go to stdout. Security events use a separate stderr
+    stream in production so Render captures them without mixing them into the
+    application log. Outside production, security events remain in a separate
+    restricted file; set SECURITY_LOG_FILE to move it.
 -->
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <property name="SECURITY_LOG_FILE" value="${SECURITY_LOG_FILE:-logs/security.log}"/>
     <property name="SECURITY_LOG_PATTERN"
               value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} - %msg%n"/>
 
@@ -26,25 +20,43 @@
         </encoder>
     </appender>
 
-    <!-- Restricted security log: access must be limited to the IT account. -->
-    <appender name="SECURITY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${SECURITY_LOG_FILE}</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${SECURITY_LOG_FILE}.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
-            <maxFileSize>10MB</maxFileSize>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>500MB</totalSizeCap>
-        </rollingPolicy>
-        <encoder>
-            <pattern>${SECURITY_LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
+    <springProfile name="prod">
+        <appender name="SECURITY_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <target>System.err</target>
+            <encoder>
+                <pattern>${SECURITY_LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
 
-    <!-- Security events only: never mixed into the general application log. -->
-    <logger name="SECURITY" level="INFO" additivity="false">
-        <appender-ref ref="SECURITY_FILE"/>
-    </logger>
+        <!-- Keep security events distinct from application logs on stdout. -->
+        <logger name="SECURITY" level="INFO" additivity="false">
+            <appender-ref ref="SECURITY_CONSOLE"/>
+        </logger>
+    </springProfile>
+
+    <springProfile name="!prod">
+        <property name="SECURITY_LOG_FILE" value="${SECURITY_LOG_FILE:-logs/security.log}"/>
+
+        <!-- Restricted development security log. -->
+        <appender name="SECURITY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${SECURITY_LOG_FILE}</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${SECURITY_LOG_FILE}.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+                <maxFileSize>10MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>500MB</totalSizeCap>
+            </rollingPolicy>
+            <encoder>
+                <pattern>${SECURITY_LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <logger name="SECURITY" level="INFO" additivity="false">
+            <appender-ref ref="SECURITY_FILE"/>
+        </logger>
+    </springProfile>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
