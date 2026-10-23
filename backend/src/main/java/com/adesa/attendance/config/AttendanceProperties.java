@@ -60,6 +60,16 @@ public class AttendanceProperties {
      */
     public static class Network {
 
+        /** Authenticate an edge gateway instead of trusting platform XFF hops. */
+        private boolean authenticatedIngressEnabled = false;
+        private String ingressSharedSecret = "";
+
+        public boolean isAuthenticatedIngressEnabled() { return authenticatedIngressEnabled; }
+        public void setAuthenticatedIngressEnabled(boolean value) { authenticatedIngressEnabled = value; }
+        public String getIngressSharedSecret() { return ingressSharedSecret; }
+        public void setIngressSharedSecret(String value) { ingressSharedSecret = value == null ? "" : value; }
+
+
         /**
          * Master switch for the office-network restriction. Must be enabled in
          * production; see {@link ProductionSafetyValidator}.

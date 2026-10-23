@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.zoho-render
+.env.ingress
 
 # Restricted security log (client addresses of denied attempts)
 logs/

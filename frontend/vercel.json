@@ -1,3 +1,17 @@
 {
-  "rewrites": [{ "source": "/((?!assets/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/gateway?__adesa_path=:path*"
+    },
+    {
+      "source": "/((?!assets/|api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/gateway.mjs": {
+      "maxDuration": 300
+    }
+  }
 }

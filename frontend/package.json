@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:gateway": "node server/office-gateway-check.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^14.0.0",

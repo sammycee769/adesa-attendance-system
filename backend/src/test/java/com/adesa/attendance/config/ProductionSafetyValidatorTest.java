@@ -62,6 +62,20 @@ class ProductionSafetyValidatorTest {
                 environment, properties, webAuthnProperties, accountProperties, mailProperties);
     }
 
+    @Test
+    void authenticatedIngressRequiresStrongSecretWithoutRelaxingEnforcement() {
+        prod();
+        properties.getNetwork().setEnforcementEnabled(true);
+        properties.getNetwork().setAllowedIpv4(List.of("105.127.8.52/32"));
+        properties.getNetwork().setAuthenticatedIngressEnabled(true);
+        properties.getNetwork().setIngressSharedSecret("weak");
+        assertThatThrownBy(() -> validator().afterPropertiesSet()).isInstanceOf(IllegalStateException.class);
+        properties.getNetwork().setIngressSharedSecret("a".repeat(64));
+        validator().afterPropertiesSet();
+        properties.getNetwork().setEnforcementEnabled(false);
+        assertThatThrownBy(() -> validator().afterPropertiesSet()).isInstanceOf(IllegalStateException.class);
+    }
+
     private void prod() {
         when(environment.getActiveProfiles()).thenReturn(new String[] {"prod"});
     }

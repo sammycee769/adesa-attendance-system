@@ -30,16 +30,33 @@ public class ClientIpResolver {
 
     private static final Logger log = LoggerFactory.getLogger(ClientIpResolver.class);
 
+    public static final String INGRESS_KEY_HEADER = "X-Adesa-Ingress-Key";
+    public static final String INGRESS_IP_HEADER = "X-Adesa-Client-IP";
+    private final boolean authenticatedIngressEnabled;
+    private final byte[] ingressSecret;
     private final String clientIpHeader;
     private final List<IPAddress> trustedProxies;
 
     public ClientIpResolver(AttendanceProperties properties) {
-        this.clientIpHeader = properties.getNetwork().getClientIpHeader();
+        this.authenticatedIngressEnabled = properties.getNetwork().isAuthenticatedIngressEnabled();
+        String secret = properties.getNetwork().getIngressSharedSecret();
+        if (authenticatedIngressEnabled && !secret.matches("[0-9a-f]{64}")) {
+            throw new IllegalStateException("Authenticated ingress requires a private random 64-character lowercase hex secret");
+        }
+        if (authenticatedIngressEnabled && !properties.getNetwork().getTrustedProxies().isEmpty()) {
+            throw new IllegalStateException("Authenticated ingress must not be combined with trusted XFF proxies");
+        }
+        this.ingressSecret = secret.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        this.clientIpHeader = authenticatedIngressEnabled ? INGRESS_IP_HEADER
+                : properties.getNetwork().getClientIpHeader();
         this.trustedProxies = NetworkAddresses.parseAll(
                 properties.getNetwork().getTrustedProxies(), "attendance.network.trusted-proxies");
     }
 
     public IPAddress resolve(HttpServletRequest request) {
+        if (authenticatedIngressEnabled) {
+            return resolveAuthenticatedIngress(request);
+        }
         IPAddress directPeer = NetworkAddresses.parseOrNull(request.getRemoteAddr());
         if (directPeer == null) {
             log.warn("Cannot parse the direct peer address; the request address is unusable");
@@ -67,6 +84,20 @@ public class ClientIpResolver {
         }
         // Every hop was a trusted proxy; the direct peer is the best answer.
         return directPeer;
+    }
+
+    private IPAddress resolveAuthenticatedIngress(HttpServletRequest request) {
+        List<String> keys = Collections.list(request.getHeaders(INGRESS_KEY_HEADER));
+        List<String> ips = Collections.list(request.getHeaders(INGRESS_IP_HEADER));
+        if (keys.size() != 1 || ips.size() != 1) return null;
+        String key = keys.getFirst();
+        if (!key.matches("[0-9a-f]{64}") || !java.security.MessageDigest.isEqual(ingressSecret,
+                key.getBytes(java.nio.charset.StandardCharsets.UTF_8))) return null;
+        String ip = ips.getFirst();
+        // One literal IPv4 only: no ranges, CIDRs, chains or alternative encodings.
+        if (!ip.matches("(?:0|[1-9][0-9]{0,2})(?:\\.(?:0|[1-9][0-9]{0,2})){3}")) return null;
+        IPAddress address = NetworkAddresses.parseOrNull(ip);
+        return address != null && address.isIPv4() && !address.isMultiple() ? address : null;
     }
 
     boolean isTrustedProxy(IPAddress address) {

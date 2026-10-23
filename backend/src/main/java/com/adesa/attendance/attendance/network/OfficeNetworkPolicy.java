@@ -62,8 +62,8 @@ public class OfficeNetworkPolicy {
             }
         } else {
             log.info("Office-network restriction is ENABLED with {} approved office network(s). "
-                    + "Forwarded client-address headers are honoured only from configured trusted "
-                    + "proxies.", approvedNetworks.size());
+                    + "Client addresses require the configured authenticated gateway or explicitly "
+                    + "trusted proxies.", approvedNetworks.size());
         }
     }
 

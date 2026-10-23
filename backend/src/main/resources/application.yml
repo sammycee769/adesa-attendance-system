@@ -81,6 +81,8 @@ attendance:
   # default timezone and never from the employee's device clock.
   timezone: ${ATTENDANCE_TIMEZONE:Africa/Lagos}
   network:
+    authenticated-ingress-enabled: ${ATTENDANCE_AUTHENTICATED_INGRESS_ENABLED:false}
+    ingress-shared-secret: ${ATTENDANCE_INGRESS_SHARED_SECRET:}
     # Master switch for the office-network restriction. It is NEVER enabled
     # implicitly: the 'prod' profile refuses to start while it is off, so an
     # operator has to switch it on deliberately after the client address has

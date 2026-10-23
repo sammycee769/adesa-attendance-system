@@ -192,6 +192,13 @@ public class ProductionSafetyValidator implements InitializingBean {
     }
 
     private void validateNetwork(AttendanceProperties.Network network) {
+        if (network.isAuthenticatedIngressEnabled()) {
+            if (!network.getIngressSharedSecret().matches("[0-9a-f]{64}")
+                    || !network.getTrustedProxies().isEmpty()) {
+                throw new IllegalStateException("Refusing to start: authenticated ingress requires a private "
+                        + "64-character hex secret and no trusted XFF proxies");
+            }
+        }
         if (!network.isEnforcementEnabled()) {
             throw new IllegalStateException(
                     "Refusing to start: the 'prod' profile is active but "
