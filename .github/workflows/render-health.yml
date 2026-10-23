@@ -1,0 +1,31 @@
+name: Render health check
+
+on:
+  schedule:
+    # Every five minutes, offset from the busiest minute at the top of the hour.
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/render-health.yml'
+      - 'scripts/keep-render-awake.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-health-check
+  cancel-in-progress: false
+
+jobs:
+  health:
+    name: Check ADESA backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Request public backend health
+        run: bash scripts/keep-render-awake.sh --once
