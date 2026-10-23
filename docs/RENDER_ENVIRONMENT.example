@@ -10,8 +10,12 @@ SESSION_COOKIE_SAME_SITE=none
 ATTENDANCE_TIMEZONE=Africa/Lagos
 ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true
 ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false
-# Provisional; validate through the hosted path before admitting attendance.
-ATTENDANCE_ALLOWED_IPV4=105.127.6.174/32
+# Owner approved the observed office egress on 2026-10-23; exact host only.
+# Recheck the office/hotspot path after deployment and after any ISP change.
+ATTENDANCE_ALLOWED_IPV4=105.127.8.52/32
+ATTENDANCE_AUTHENTICATED_INGRESS_ENABLED=true
+# Private 64-character hex key matching Vercel's server-only INGRESS_SHARED_SECRET.
+ATTENDANCE_INGRESS_SHARED_SECRET=
 # Leave empty until the exact stable proxy hosts and header behavior are verified.
 ATTENDANCE_TRUSTED_PROXY_ADDRESSES=
 ATTENDANCE_CLIENT_IP_HEADER=X-Forwarded-For

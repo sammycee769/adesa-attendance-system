@@ -53,10 +53,10 @@ WEBAUTHN_USER_VERIFICATION_REQUIRED=true
 MAIL_PROVIDER=zoho-api
 ```
 
-Provisional, pending live path verification:
+Owner-approved office egress (2026-10-23; repeat live office/hotspot verification):
 
 ```dotenv
-ATTENDANCE_ALLOWED_IPV4=105.127.6.174/32
+ATTENDANCE_ALLOWED_IPV4=105.127.8.52/32
 ```
 
 Values the owner must obtain (not guesses):
@@ -234,3 +234,19 @@ npm --prefix frontend run build
 ```
 
 A green local suite does not verify Supabase, Zoho or office/hotspot behavior.
+
+## Gateway rollout and approved office-IP update — 2026-10-23
+
+The authenticated Vercel gateway is deployed. API requests now use the frontend
+hostname. The owner explicitly approved replacing the original provisional
+105.127.6.174/32 with observed office egress 105.127.8.52/32. Only this exact host
+was changed; enforcement and authenticated ingress stay enabled, development
+bypass stays off and trusted XFF proxies stay empty. ISP static/dedicated status
+has not been independently confirmed; future address changes must fail closed.
+
+Older open frontend tabs may retain the direct-Render API URL and produce
+CLIENT_ADDRESS_UNRESOLVED. Hard-refresh the frontend and sign in again, then
+inspect /api/v1/admin/network/client-address on the FRONTEND hostname. Run
+`python3 scripts/check_office_network.py --gateway` from office Wi-Fi and hotspot
+to validate actual authenticated addresses and forged-header rejection. A successful
+deployment or a public CSRF check does not replace these live acceptance checks.
