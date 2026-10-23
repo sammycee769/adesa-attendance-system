@@ -39,6 +39,7 @@ export default {
     const headers = new Headers(request.headers);
     for (const name of [KEY, IP, 'X-Forwarded-For', 'True-Client-IP',
       'X-Real-IP', 'Forwarded', 'CF-Connecting-IP', 'x-vercel-forwarded-for', 'Host',
+      'X-Vercel-Protection-Bypass', 'X-Vercel-Trusted-Oidc-Idp-Token', 'X-Vercel-Oidc-Token',
       'Connection', 'Transfer-Encoding', 'Keep-Alive', 'Upgrade', 'TE', 'Trailer',
       'Proxy-Authorization', 'Proxy-Authenticate', 'Content-Length']) headers.delete(name);
     headers.set(KEY, env.INGRESS_SHARED_SECRET);

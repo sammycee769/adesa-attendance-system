@@ -24,11 +24,15 @@ test('replaces forged proof and XFF with the edge-observed IP; preserves auth co
       'x-vercel-forwarded-for': '129.205.124.218', 'X-Adesa-Ingress-Key': 'forged',
       'X-Adesa-Client-IP': '105.127.8.52', 'X-Forwarded-For': '105.127.8.52',
       'Cookie': 'JSESSIONID=fixture', 'Origin': 'https://adesa-attendance-frontend.vercel.app',
+      'X-Vercel-Protection-Bypass': 'private-bypass-fixture',
+      'X-Vercel-Trusted-Oidc-Idp-Token': 'private-oidc-fixture',
     }), env);
     assert.equal(result.status, 200);
     assert.equal(captured.options.headers.get('X-Adesa-Client-IP'), '129.205.124.218');
     assert.equal(captured.options.headers.get('X-Adesa-Ingress-Key'), env.INGRESS_SHARED_SECRET);
     assert.equal(captured.options.headers.get('X-Forwarded-For'), null);
+    assert.equal(captured.options.headers.get('X-Vercel-Protection-Bypass'), null);
+    assert.equal(captured.options.headers.get('X-Vercel-Trusted-Oidc-Idp-Token'), null);
     assert.equal(captured.options.headers.get('Cookie'), 'JSESSIONID=fixture');
     assert.equal(captured.options.redirect, 'manual');
     assert.match(captured.url, /^https:\/\/adesa-attendance-system\.onrender\.com\/api\//);
