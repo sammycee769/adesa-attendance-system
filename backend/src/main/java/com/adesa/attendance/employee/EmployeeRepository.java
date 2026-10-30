@@ -1,12 +1,15 @@
 package com.adesa.attendance.employee;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
 public interface EmployeeRepository extends JpaRepository<Employee, UUID>, JpaSpecificationExecutor<Employee> {
 
@@ -23,6 +26,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID>, JpaSp
     long countByRoleAndActiveTrue(EmployeeRole role);
 
     Employee findByEmail(String email);
+
+    /** Serializes successful logins so concurrent requests cannot share a session version. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from Employee e where e.id = :id")
+    Optional<Employee> findForLogin(@Param("id") UUID id);
 
     /** The active roster, for the daily attendance overview. */
     List<Employee> findByActiveTrueOrderByEmployeeNumberAsc();

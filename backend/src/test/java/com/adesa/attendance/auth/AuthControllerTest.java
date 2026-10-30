@@ -14,6 +14,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import com.adesa.attendance.employee.EmployeeRole;
 import com.adesa.attendance.security.AuthenticatedEmployee;
@@ -173,6 +176,52 @@ class AuthControllerTest {
                 "SELECT count(*) FROM audit_logs WHERE action = 'LOGIN_SUCCEEDED' AND actor_id = ?",
                 Integer.class, employeeId);
         assertThat(audited).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("A newer login replaces the previous session without affecting other employees")
+    void latestLoginReplacesPreviousSession() throws Exception {
+        UUID employee = createEmployee(true, "single-session-password-123");
+        UUID otherEmployee = createEmployee(true, "another-employee-password-123");
+        MockHttpSession first = login(emailFor(employee), "single-session-password-123");
+        MockHttpSession unrelated = login(emailFor(otherEmployee), "another-employee-password-123");
+        MockHttpSession latest = login(emailFor(employee), "single-session-password-123");
+
+        mockMvc.perform(get("/api/v1/auth/me").session(first)).andExpect(status().isUnauthorized());
+        assertThat(first.isInvalid()).isTrue();
+        mockMvc.perform(get("/api/v1/auth/me").session(latest)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/auth/me").session(unrelated)).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("An incorrect password cannot evict an employee's valid session")
+    void failedLoginPreservesExistingSession() throws Exception {
+        UUID employee = createEmployee(true, "single-session-password-123");
+        MockHttpSession session = login(emailFor(employee), "single-session-password-123");
+        mockMvc.perform(post("/api/v1/auth/login").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", emailFor(employee), "password", "incorrect-password-123"))))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/me").session(session)).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Simultaneous successful logins leave exactly one valid session")
+    void simultaneousLoginsHaveOneWinner() throws Exception {
+        UUID employee = createEmployee(true, "concurrent-session-password-123");
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<MockHttpSession> attempt = () -> login(emailFor(employee), "concurrent-session-password-123");
+            var first = executor.submit(attempt);
+            var second = executor.submit(attempt);
+            MockHttpSession a = first.get(30, TimeUnit.SECONDS);
+            MockHttpSession b = second.get(30, TimeUnit.SECONDS);
+            assertThat(a.getAttribute(SessionAttributes.CREDENTIALS_VERSION))
+                    .isNotEqualTo(b.getAttribute(SessionAttributes.CREDENTIALS_VERSION));
+            int statusA = mockMvc.perform(get("/api/v1/auth/me").session(a)).andReturn().getResponse().getStatus();
+            int statusB = mockMvc.perform(get("/api/v1/auth/me").session(b)).andReturn().getResponse().getStatus();
+            assertThat(java.util.List.of(statusA, statusB)).containsExactlyInAnyOrder(200, 401);
+        }
     }
 
     @Test

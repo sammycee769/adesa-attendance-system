@@ -40,7 +40,7 @@ import jakarta.servlet.http.HttpSession;
  *
  * <p>A successful password login establishes a server-side session and rotates
  * the session id (fixation protection). The session records the employee id,
- * the credentials version and the login time; {@code /auth/me} returns the
+ * a fresh credentials version (replacing older sessions) and the login time; {@code /auth/me} returns the
  * identity and device state.
  *
  * <p>Login failures are audited in their own transaction and are rate limited
@@ -58,6 +58,7 @@ public class AuthService {
     private final LoginRateLimiter loginRateLimiter;
     private final DeviceService deviceService;
     private final ClientIpResolver clientIpResolver;
+    private final LoginSessionService loginSessionService;
     private final HttpSessionSecurityContextRepository securityContextRepository =
             new HttpSessionSecurityContextRepository();
 
@@ -66,13 +67,15 @@ public class AuthService {
                        AuditService auditService,
                        LoginRateLimiter loginRateLimiter,
                        DeviceService deviceService,
-                       ClientIpResolver clientIpResolver) {
+                       ClientIpResolver clientIpResolver,
+                       LoginSessionService loginSessionService) {
         this.employeeRepository = employeeRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
         this.loginRateLimiter = loginRateLimiter;
         this.deviceService = deviceService;
         this.clientIpResolver = clientIpResolver;
+        this.loginSessionService = loginSessionService;
     }
 
     public CurrentUserResponse login(LoginRequest request, HttpServletRequest httpRequest,
@@ -113,10 +116,9 @@ public class AuthService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
+        employee = loginSessionService.replaceSession(employee.getId(), employee.getPasswordHash());
         loginRateLimiter.reset(accountKey);
         establishSession(employee, httpRequest, httpResponse);
-        auditService.recordInNewTransaction(employee.getId(), AuditAction.LOGIN_SUCCEEDED, "EMPLOYEE",
-                employee.getId(), null);
         return currentUser(employee);
     }
 
@@ -149,7 +151,8 @@ public class AuthService {
 
     private void establishSession(Employee employee, HttpServletRequest httpRequest,
                                   HttpServletResponse httpResponse) {
-        // Rotate the pre-authentication session id to prevent session fixation.
+        // The committed version invalidates every older session through
+        // CredentialsVersionFilter. Rotate this session id to prevent fixation.
         if (httpRequest.getSession(false) != null) {
             httpRequest.changeSessionId();
         }

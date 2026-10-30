@@ -571,6 +571,11 @@ body (timestamp, status, error, message, path, fieldErrors).
   (`SESSION_IDLE_TIMEOUT`) and an absolute lifetime (`SESSION_ABSOLUTE_TIMEOUT`)
   are both enforced; the latter needs a filter because Spring only implements
   idle timeouts.
+- Only the latest successful login remains active for each employee. A new
+  login increments the database credentials version under a row lock; older
+  sessions receive HTTP 401 on their next request. Failed logins do not replace
+  a valid session. Concurrent logins receive distinct versions, so only one
+  remains usable. This applies to employees, HR and administrators.
 - Failed passwords are limited per email (`LOGIN_MAX_FAILURES` inside
   `LOGIN_WINDOW` → HTTP 429 with `Retry-After`). The response never reveals
   whether the email exists.

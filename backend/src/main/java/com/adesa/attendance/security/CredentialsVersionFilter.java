@@ -26,7 +26,7 @@ import jakarta.servlet.http.HttpSession;
  * <p>Every session records the {@code credentials_version} it was created with.
  * If that version no longer matches the database value — because an
  * administrator reset the password, changed the role, deactivated the account
- * or revoked the employee's device — the session is destroyed and the caller
+ * revoked the employee's device, or a newer login replaced this session — the session is destroyed and the caller
  * receives 401. This is what makes "invalidate sessions on credential
  * revocation" true without a separate blocklist.
  *

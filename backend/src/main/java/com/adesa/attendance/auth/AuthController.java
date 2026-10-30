@@ -48,7 +48,8 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Sign in with employee number email and password",
-            description = "Creates a server-side session. 401 on bad credentials, 429 when rate limited.")
+            description = "Creates a server-side session and replaces all older sessions for this employee. "
+                    + "401 on bad credentials, 429 when rate limited.")
     public CurrentUserResponse login(@Valid @RequestBody LoginRequest request,
                                      HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
