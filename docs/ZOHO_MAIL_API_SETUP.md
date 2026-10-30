@@ -57,6 +57,22 @@ API access and sending limits must be permitted by your Zoho account and policy.
    Never paste the file, authorization code or tokens into chat or screenshots.
 
 `MAIL_HOST`, SMTP username/password and SMTP TLS flags are ignored in API mode.
+For the existing mailbox alias `it@adesahq.com`, set `MAIL_FROM=it@adesahq.com`
+in Render and redeploy; retain the connected mailbox's existing OAuth credentials.
+Zoho must authorize the alias for that mailbox.
+
+Account messages include the IT department signature and an automated-email
+notice in both HTML and plain text. The Zoho provider sends the HTML body when
+available, with a plain-text fallback for messages without HTML. The app owns
+the signature in `backend/src/main/resources/mail/it-signature.html`; changes to
+the Zoho webmail signature do not update this template automatically. The current
+template uses the supplied ADESA HQ and GROUP HEADQUARTERS PNGs, served publicly
+from `frontend/public/assets/email/` using the configured `APP_PUBLIC_URL`.
+Deploy the frontend assets before deploying the backend email changes. Verify
+both `/assets/email/adesa-hq.png` and `/assets/email/group-headquarters.png` return
+HTTP 200 with an image content type from that public origin. Private
+`/zm/ImageSignature` URLs must not be used in outgoing app emails.
+
 Production startup rejects incomplete API configuration. Access tokens refresh
 in memory before expiry; refresh tokens remain private server configuration.
 Requests have timeouts, use fixed regional HTTPS hosts, and do not follow

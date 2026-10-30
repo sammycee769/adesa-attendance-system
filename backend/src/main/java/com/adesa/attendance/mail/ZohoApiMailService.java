@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -43,14 +44,15 @@ public final class ZohoApiMailService implements MailService {
         try {
             String recipient = mailbox(to);
             String token = accessToken();
+            boolean hasHtml = StringUtils.hasText(htmlBody);
             JsonNode result = client.post()
                     .uri(zoho.getDataCenter().mailOrigin() + "/api/accounts/{accountId}/messages",
                             zoho.getAccountId())
                     .header("Authorization", "Zoho-oauthtoken " + token)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("fromAddress", from, "toAddress", recipient,
-                            "subject", subject, "content", textBody,
-                            "mailFormat", "plaintext", "encoding", "UTF-8"))
+                            "subject", subject, "content", hasHtml ? htmlBody : textBody,
+                            "mailFormat", hasHtml ? "html" : "plaintext", "encoding", "UTF-8"))
                     .retrieve().body(JsonNode.class);
             // Zoho can report an application error in a successful HTTP response.
             if (result == null || result.path("status").path("code").asInt() != 200) {

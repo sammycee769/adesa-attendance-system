@@ -63,8 +63,8 @@ class ZohoApiMailServiceTest {
                 .andExpect(header("Authorization", "Zoho-oauthtoken " + token))
                 .andExpect(content().json("""
                         {"fromAddress":"attendance@adesa.test","toAddress":"employee@adesa.test",
-                         "subject":"Account setup","content":"Use the private setup link",
-                         "mailFormat":"plaintext","encoding":"UTF-8"}
+                         "subject":"Account setup","content":"<p>Setup</p>",
+                         "mailFormat":"html","encoding":"UTF-8"}
                         """))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
     }
@@ -82,6 +82,19 @@ class ZohoApiMailServiceTest {
         send();
         server.verify();
         assertThat(service.isDeliveryEnabled()).isTrue();
+    }
+
+    @Test
+    void sendsPlainTextWhenThereIsNoHtmlBody() {
+        expectToken("test-access");
+        server.expect(requestTo("https://mail.zoho.eu/api/accounts/123456789/messages"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {"content":"Text-only message","mailFormat":"plaintext"}
+                        """))
+                .andRespond(withSuccess("{\"status\":{\"code\":200}}", MediaType.APPLICATION_JSON));
+        service.send("employee@adesa.test", "Notice", "Text-only message", " ");
+        server.verify();
     }
 
     @Test
