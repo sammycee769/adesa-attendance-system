@@ -391,6 +391,9 @@ class WebAuthnFlowTest {
                         .with(authentication(asEmployee(employeeId))))
                 .andExpect(status().isOk());
 
+        Integer versionBeforeRevocation = jdbcTemplate.queryForObject(
+                "SELECT credentials_version FROM employees WHERE id = ?", Integer.class, employeeId);
+
         mockMvc.perform(post("/api/v1/admin/devices/" + deviceId + "/revoke")
                         .with(authentication(asAdmin()))
                         .with(csrf()))
@@ -405,7 +408,7 @@ class WebAuthnFlowTest {
 
         Integer version = jdbcTemplate.queryForObject(
                 "SELECT credentials_version FROM employees WHERE id = ?", Integer.class, employeeId);
-        assertThat(version).isEqualTo(2);
+        assertThat(version).isEqualTo(versionBeforeRevocation + 1);
         String status = jdbcTemplate.queryForObject(
                 "SELECT status FROM registered_devices WHERE id = ?", String.class, deviceId);
         assertThat(status).isEqualTo("REVOKED");

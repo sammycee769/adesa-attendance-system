@@ -276,14 +276,17 @@ class AttendanceApiTest {
     @DisplayName("A device proof issued for another session is refused")
     void deviceProofFromAnotherSessionRejected() throws Exception {
         UUID employeeId = fixtures.createEmployee(true, PASSWORD);
-        MockHttpSession session = login(employeeId);
-        MockHttpSession otherSession = login(employeeId);
+        MockHttpSession oldSession = login(employeeId);
+        MockHttpSession currentSession = login(employeeId);
         UUID deviceId = fixtures.approveDevice(employeeId);
-        // Proof issued to the other session.
-        UUID proofId = fixtures.issueProof(employeeId, deviceId, otherSession.getId());
+        // Even the current session cannot use a proof bound to an older one.
+        UUID proofId = fixtures.issueProof(employeeId, deviceId, oldSession.getId());
 
-        signIn(session, proofId)
+        signIn(currentSession, proofId)
                 .andExpect(status().isForbidden());
+        // The replaced session is rejected before it can use its own proof.
+        signIn(oldSession, proofId)
+                .andExpect(status().isUnauthorized());
 
         assertThat(fixtures.countRecords(employeeId)).isZero();
     }
