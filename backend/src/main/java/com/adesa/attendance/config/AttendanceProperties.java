@@ -38,7 +38,7 @@ public class AttendanceProperties {
         private boolean enabled;
         private Double latitude;
         private Double longitude;
-        private double radiusMetres = 100;
+        private double radiusMetres = 50;
         private double maxAccuracyMetres = 50;
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { enabled = value; }

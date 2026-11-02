@@ -80,7 +80,7 @@ attendance:
     enabled: ${ATTENDANCE_GEOLOCATION_ENABLED:false}
     latitude: ${ATTENDANCE_OFFICE_LATITUDE:}
     longitude: ${ATTENDANCE_OFFICE_LONGITUDE:}
-    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:100}
+    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:50}
     max-accuracy-metres: ${ATTENDANCE_LOCATION_MAX_ACCURACY_METRES:50}
   # Timezone that defines the attendance workday and the displayed timestamps.
   # Africa/Lagos is the ADESA HQ location; never derived from the server's

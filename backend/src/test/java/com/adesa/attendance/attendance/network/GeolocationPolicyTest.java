@@ -28,10 +28,12 @@ class GeolocationPolicyTest {
     @Test void acceptsAnAccurateOfficeFixAndRejectsOutsideOrUncertainFixes() {
         var policy = policy(settings());
         assertThatCode(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 15))).doesNotThrowAnyException();
+        assertThatCode(() -> policy.requireInsideOffice(fix(6.6414393, 3.371182, 10))).doesNotThrowAnyException();
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6418393, 3.371182, 5))).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.65, 3.38, 5))).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 200))).isInstanceOf(ForbiddenException.class);
-        // About 89m from the pin plus 20m uncertainty must not enlarge the 100m boundary.
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6420393, 3.371182, 20))).isInstanceOf(ForbiddenException.class);
+        // About 40m from the pin plus 20m uncertainty must not enlarge the 50m boundary.
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6415993, 3.371182, 20))).isInstanceOf(ForbiddenException.class);
     }
 
     @Test void requiresFreshFiniteCompleteCoordinates() {

@@ -40,7 +40,7 @@ attendance:
     enabled: ${ATTENDANCE_GEOLOCATION_ENABLED:true}
     latitude: ${ATTENDANCE_OFFICE_LATITUDE:6.6412393}
     longitude: ${ATTENDANCE_OFFICE_LONGITUDE:3.3711820}
-    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:100}
+    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:50}
   network:
     # Enforcement is never switched on implicitly: the operator must enable it
     # explicitly, and only after the office client address has been verified

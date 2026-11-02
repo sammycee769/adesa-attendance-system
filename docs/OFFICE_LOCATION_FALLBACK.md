@@ -1,7 +1,7 @@
 # IP-first attendance with location fallback
 
-The owner approved the office pin `6.6412393, 3.3711820` and a 100-metre radius
-on 2026-11-02. Both attendance sign-in and sign-out use this policy:
+The owner approved the office pin `6.6412393, 3.3711820` and reduced the initial
+100-metre radius to 50 metres on 2026-11-02. Both attendance sign-in and sign-out use this policy:
 
 1. An approved public IPv4 passes immediately, without requesting location.
 2. An off-network request authenticated by the Vercel gateway receives HTTP 403
@@ -11,7 +11,7 @@ on 2026-11-02. Both attendance sign-in and sign-out use this policy:
 4. The backend accepts a fix only when it is complete, finite, no older than
    60 seconds, no more than 5 seconds in the future, and reports accuracy within
    50 metres. Distance from the pin plus reported accuracy must fit within the
-   100-metre radius. An uncertainty estimate never enlarges the boundary.
+   50-metre radius. An uncertainty estimate never enlarges the boundary.
 
 Passkey approval, single-use session-bound proof, session validity, CSRF and
 attendance business rules remain mandatory. A missing/forged gateway key cannot
@@ -26,7 +26,7 @@ profiles default to IP-only. Optional Render overrides:
 ATTENDANCE_GEOLOCATION_ENABLED=true
 ATTENDANCE_OFFICE_LATITUDE=6.6412393
 ATTENDANCE_OFFICE_LONGITUDE=3.3711820
-ATTENDANCE_OFFICE_RADIUS_METRES=100
+ATTENDANCE_OFFICE_RADIUS_METRES=50
 ATTENDANCE_LOCATION_MAX_ACCURACY_METRES=50
 ```
 
@@ -55,10 +55,10 @@ Use a dedicated test account and approved passkey. Attendance tests create real
 records. On approved office Wi-Fi, verify attendance succeeds without requesting
 location. On mobile data while inside the office, verify one browser location
 request and an automatic successful retry. Repeat for sign-out with a new proof.
-Test outside 100m, denied permission, disabled phone location and poor accuracy:
+Test outside 50m, denied permission, disabled phone location and poor accuracy:
 none should create or close a record. Confirm a stale session is still rejected.
 Test different phones and positions in the building before relying on the
-geofence for all staff; a 100m circle may include adjacent buildings and roads.
+geofence for all staff; even a 50m circle may include adjacent buildings and roads.
 
 Automated coverage: `GeolocationPolicyTest`, `AttendanceGeolocationTest`, the
 existing network/ingress tests, and `frontend/src/api/attendance.test.ts`.
