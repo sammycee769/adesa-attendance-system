@@ -22,12 +22,14 @@ const CSRF_HEADER_NAME = 'X-XSRF-TOKEN';
 export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors: FieldViolation[];
+  readonly code?: string | null;
 
-  constructor(status: number, message: string, fieldErrors: FieldViolation[] = []) {
+  constructor(status: number, message: string, fieldErrors: FieldViolation[] = [], code?: string | null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.code = code;
   }
 
   /** True when the session is missing or expired. */
@@ -248,6 +250,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         response.status,
         body?.message ?? defaultMessage(response.status),
         body?.fieldErrors ?? [],
+        body?.code,
       );
     }
 

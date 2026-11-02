@@ -158,6 +158,7 @@ export interface AttendanceCorrection {
 }
 
 export interface ApiErrorBody {
+  code?: string | null;
   timestamp: string;
   status: number;
   error: string;
