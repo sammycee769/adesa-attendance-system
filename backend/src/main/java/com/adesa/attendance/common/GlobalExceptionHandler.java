@@ -32,6 +32,13 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(com.adesa.attendance.attendance.network.LocationRequiredException.class)
+    public ResponseEntity<ApiError> locationRequired(
+            com.adesa.attendance.attendance.network.LocationRequiredException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiError(java.time.Instant.now(), 403,
+                "Forbidden", ex.getMessage(), request.getRequestURI(), List.of(), "LOCATION_REQUIRED"));
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiError> notFound(NotFoundException ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);

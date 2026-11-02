@@ -35,6 +35,12 @@ server:
         same-site: ${SESSION_COOKIE_SAME_SITE:none}
 
 attendance:
+  # Owner-approved pin and radius. IP is checked first; location is requested only on mismatch.
+  geolocation:
+    enabled: ${ATTENDANCE_GEOLOCATION_ENABLED:true}
+    latitude: ${ATTENDANCE_OFFICE_LATITUDE:6.6412393}
+    longitude: ${ATTENDANCE_OFFICE_LONGITUDE:3.3711820}
+    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:100}
   network:
     # Enforcement is never switched on implicitly: the operator must enable it
     # explicitly, and only after the office client address has been verified

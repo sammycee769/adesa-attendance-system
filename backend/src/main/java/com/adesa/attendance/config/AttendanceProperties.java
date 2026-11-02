@@ -30,6 +30,27 @@ public class AttendanceProperties {
 
     /** The office-network policy. */
     private final Network network = new Network();
+    private final Geolocation geolocation = new Geolocation();
+
+    public Geolocation getGeolocation() { return geolocation; }
+
+    public static class Geolocation {
+        private boolean enabled;
+        private Double latitude;
+        private Double longitude;
+        private double radiusMetres = 100;
+        private double maxAccuracyMetres = 50;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean value) { enabled = value; }
+        public Double getLatitude() { return latitude; }
+        public void setLatitude(Double value) { latitude = value; }
+        public Double getLongitude() { return longitude; }
+        public void setLongitude(Double value) { longitude = value; }
+        public double getRadiusMetres() { return radiusMetres; }
+        public void setRadiusMetres(double value) { radiusMetres = value; }
+        public double getMaxAccuracyMetres() { return maxAccuracyMetres; }
+        public void setMaxAccuracyMetres(double value) { maxAccuracyMetres = value; }
+    }
 
     /**
      * Timezone that defines the attendance workday and the displayed

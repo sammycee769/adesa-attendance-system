@@ -15,17 +15,18 @@ public record ApiError(
         String error,
         String message,
         String path,
-        List<FieldViolation> fieldErrors) {
+        List<FieldViolation> fieldErrors,
+        String code) {
 
     public record FieldViolation(String field, String message) {
     }
 
     public static ApiError of(int status, String error, String message, String path) {
-        return new ApiError(Instant.now(), status, error, message, path, List.of());
+        return new ApiError(Instant.now(), status, error, message, path, List.of(), null);
     }
 
     public static ApiError of(int status, String error, String message, String path,
                               List<FieldViolation> fieldErrors) {
-        return new ApiError(Instant.now(), status, error, message, path, fieldErrors);
+        return new ApiError(Instant.now(), status, error, message, path, fieldErrors, null);
     }
 }

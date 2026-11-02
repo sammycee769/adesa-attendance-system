@@ -104,7 +104,13 @@ public class AttendanceService {
      */
     @Transactional
     public AttendanceRecordResponse signIn(HttpServletRequest request, UUID employeeId, UUID deviceProofId) {
-        accessGuard.requireApprovedNetwork(employeeId, "SIGN_IN", request);
+        return signIn(request, employeeId, deviceProofId, null);
+    }
+
+    @Transactional
+    public AttendanceRecordResponse signIn(HttpServletRequest request, UUID employeeId, UUID deviceProofId,
+                                           com.adesa.attendance.attendance.dto.AttendanceLocation location) {
+        String verification = accessGuard.requireApprovedNetwork(employeeId, "SIGN_IN", request, location);
         requireActiveEmployee(employeeId);
         RegisteredDevice approvedDevice = deviceService.requireApprovedDevice(employeeId);
         consumeDeviceProof(employeeId, approvedDevice, deviceProofId, sessionId(request), "SIGN_IN");
@@ -130,7 +136,7 @@ public class AttendanceService {
 
         auditService.record(employeeId, AuditAction.ATTENDANCE_SIGNED_IN, "ATTENDANCE_RECORD", record.getId(),
                 Map.of("attendanceDate", attendanceDate.toString(),
-                        "signInAt", now.toString()));
+                        "signInAt", now.toString(), "verificationMethod", verification));
         log.info("Employee {} signed in on {}", employeeId, attendanceDate);
         return AttendanceRecordResponse.from(record, workdayResolver.zone());
     }
@@ -146,7 +152,13 @@ public class AttendanceService {
      */
     @Transactional
     public AttendanceRecordResponse signOut(HttpServletRequest request, UUID employeeId, UUID deviceProofId) {
-        accessGuard.requireApprovedNetwork(employeeId, "SIGN_OUT", request);
+        return signOut(request, employeeId, deviceProofId, null);
+    }
+
+    @Transactional
+    public AttendanceRecordResponse signOut(HttpServletRequest request, UUID employeeId, UUID deviceProofId,
+                                            com.adesa.attendance.attendance.dto.AttendanceLocation location) {
+        String verification = accessGuard.requireApprovedNetwork(employeeId, "SIGN_OUT", request, location);
         requireActiveEmployee(employeeId);
         RegisteredDevice approvedDevice = deviceService.requireApprovedDevice(employeeId);
         consumeDeviceProof(employeeId, approvedDevice, deviceProofId, sessionId(request), "SIGN_OUT");
@@ -172,7 +184,7 @@ public class AttendanceService {
 
         auditService.record(employeeId, AuditAction.ATTENDANCE_SIGNED_OUT, "ATTENDANCE_RECORD", record.getId(),
                 Map.of("attendanceDate", attendanceDate.toString(),
-                        "signOutAt", now.toString()));
+                        "signOutAt", now.toString(), "verificationMethod", verification));
         log.info("Employee {} signed out on {}", employeeId, attendanceDate);
         return AttendanceRecordResponse.from(record, workdayResolver.zone());
     }

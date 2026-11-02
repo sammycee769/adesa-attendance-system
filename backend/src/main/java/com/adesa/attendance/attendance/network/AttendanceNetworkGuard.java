@@ -81,7 +81,7 @@ public class AttendanceNetworkGuard {
 
         if (clientAddress == null) {
             // Cannot evaluate the policy safely -> fail closed.
-            log.warn("Rejecting attendance request: the client address could not be determined safely");
+            log.warn("Office-IP check failed: the client address could not be determined safely");
             throw new NetworkAccessDeniedException(DENIED_MESSAGE,
                     NetworkAccessDeniedException.REASON_UNRESOLVED, null);
         }
@@ -94,7 +94,7 @@ public class AttendanceNetworkGuard {
         }
 
         if (!officeNetworkPolicy.isWithinApprovedNetwork(clientAddress)) {
-            log.warn("Rejecting attendance request: the client is outside the approved office network");
+            log.warn("Office-IP check failed: the client is outside the approved office network");
             throw new NetworkAccessDeniedException(DENIED_MESSAGE,
                     NetworkAccessDeniedException.REASON_OUTSIDE_APPROVED_NETWORK, clientAddress.toString());
         }

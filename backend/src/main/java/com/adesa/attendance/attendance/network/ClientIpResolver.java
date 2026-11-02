@@ -87,6 +87,16 @@ public class ClientIpResolver {
     }
 
     private IPAddress resolveAuthenticatedIngress(HttpServletRequest request) {
+        IPAddress address = authenticatedIngressAddress(request);
+        return address != null && address.isIPv4() ? address : null;
+    }
+
+    /** A location fallback still requires a real gateway request, including for native IPv6 clients. */
+    public boolean hasAuthenticatedIngress(HttpServletRequest request) {
+        return authenticatedIngressEnabled && authenticatedIngressAddress(request) != null;
+    }
+
+    private IPAddress authenticatedIngressAddress(HttpServletRequest request) {
         List<String> keys = Collections.list(request.getHeaders(INGRESS_KEY_HEADER));
         List<String> ips = Collections.list(request.getHeaders(INGRESS_IP_HEADER));
         if (keys.size() != 1 || ips.size() != 1) return null;
@@ -94,10 +104,12 @@ public class ClientIpResolver {
         if (!key.matches("[0-9a-f]{64}") || !java.security.MessageDigest.isEqual(ingressSecret,
                 key.getBytes(java.nio.charset.StandardCharsets.UTF_8))) return null;
         String ip = ips.getFirst();
-        // One literal IPv4 only: no ranges, CIDRs, chains or alternative encodings.
-        if (!ip.matches("(?:0|[1-9][0-9]{0,2})(?:\\.(?:0|[1-9][0-9]{0,2})){3}")) return null;
+        // One literal IP only: no ranges, CIDRs, chains or alternative IPv4 encodings.
+        boolean ipv4 = ip.matches("(?:0|[1-9][0-9]{0,2})(?:\\.(?:0|[1-9][0-9]{0,2})){3}");
+        boolean ipv6 = ip.contains(":") && ip.matches("[0-9a-fA-F:]+");
+        if (!ipv4 && !ipv6) return null;
         IPAddress address = NetworkAddresses.parseOrNull(ip);
-        return address != null && address.isIPv4() && !address.isMultiple() ? address : null;
+        return address != null && !address.isMultiple() ? address : null;
     }
 
     boolean isTrustedProxy(IPAddress address) {

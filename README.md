@@ -585,6 +585,11 @@ body (timestamp, status, error, message, path, fieldErrors).
 
 ### WebAuthn / registered device
 
+Attendance checks the office IP first, then can automatically fall back to a
+fresh browser location within the approved office area. See
+[office location fallback](docs/OFFICE_LOCATION_FALLBACK.md) for configuration,
+security limits, deployment order and physical-device acceptance tests.
+
 | Method & path | Purpose |
 |---|---|
 | `POST /api/v1/auth/webauthn/register/options` | Registration options (409 if a device is already approved) |

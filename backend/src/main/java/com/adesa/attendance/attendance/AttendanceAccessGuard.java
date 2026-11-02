@@ -8,6 +8,9 @@ import com.adesa.attendance.attendance.network.NetworkAccessDeniedException;
 import com.adesa.attendance.audit.AuditAction;
 import com.adesa.attendance.audit.AuditService;
 import com.adesa.attendance.audit.SecurityEventLogger;
+import com.adesa.attendance.attendance.dto.AttendanceLocation;
+import com.adesa.attendance.attendance.network.GeolocationPolicy;
+import com.adesa.attendance.common.ForbiddenException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,10 +19,9 @@ import org.springframework.stereotype.Component;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Gate for every attendance mutation: the office-network policy.
+ * Gate for every attendance mutation: approved office IP, or the enabled location fallback.
  *
- * <p>Attendance sign-in and sign-out are only accepted from the approved ADESA
- * office network. The check is performed here — before any attendance state is
+ * <p>The check is performed here — before any attendance state is
  * touched — and a rejection is recorded as a security event in its own
  * transaction, so the audit trail survives the rejected request.
  *
@@ -36,13 +38,16 @@ public class AttendanceAccessGuard {
     private final AttendanceNetworkGuard networkGuard;
     private final AuditService auditService;
     private final SecurityEventLogger securityEventLogger;
+    private final GeolocationPolicy geolocationPolicy;
 
     public AttendanceAccessGuard(AttendanceNetworkGuard networkGuard,
                                  AuditService auditService,
-                                 SecurityEventLogger securityEventLogger) {
+                                 SecurityEventLogger securityEventLogger,
+                                 GeolocationPolicy geolocationPolicy) {
         this.networkGuard = networkGuard;
         this.auditService = auditService;
         this.securityEventLogger = securityEventLogger;
+        this.geolocationPolicy = geolocationPolicy;
     }
 
     /**
@@ -53,10 +58,29 @@ public class AttendanceAccessGuard {
      * @throws com.adesa.attendance.common.ForbiddenException when the client is
      *         not on an approved network
      */
-    public void requireApprovedNetwork(UUID employeeId, String action, HttpServletRequest request) {
+    public String requireApprovedNetwork(UUID employeeId, String action, HttpServletRequest request) {
+        return requireApprovedNetwork(employeeId, action, request, null);
+    }
+
+    public String requireApprovedNetwork(UUID employeeId, String action, HttpServletRequest request,
+                                        AttendanceLocation location) {
         try {
             networkGuard.requireApprovedClientNetwork(request);
+            return "OFFICE_IP";
         } catch (NetworkAccessDeniedException ex) {
+            if (!NetworkAccessDeniedException.REASON_ENFORCEMENT_DISABLED.equals(ex.getReason())
+                    && geolocationPolicy.canFallback(request)) {
+                try {
+                    geolocationPolicy.requireInsideOffice(location);
+                    return "GEOLOCATION";
+                } catch (com.adesa.attendance.attendance.network.LocationRequiredException required) {
+                    throw required;
+                } catch (ForbiddenException denied) {
+                    auditService.recordInNewTransaction(employeeId, AuditAction.ATTENDANCE_ACTION_REJECTED,
+                            "ATTENDANCE_RECORD", null, Map.of("action", action, "reason", "LOCATION_NOT_CONFIRMED"));
+                    throw denied;
+                }
+            }
             log.warn("Attendance {} rejected for employee {}: the office-network policy refused the request",
                     action, employeeId);
             securityEventLogger.attendanceDenied(action, ex.getReason(), ex.getClientIp(), employeeId);

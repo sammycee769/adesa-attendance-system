@@ -12,5 +12,6 @@ import jakarta.validation.constraints.NotNull;
  * session-bound proof of a recent WebAuthn assertion with the employee's
  * approved device.
  */
-public record AttendanceActionRequest(@NotNull UUID deviceProofId) {
+public record AttendanceActionRequest(@NotNull UUID deviceProofId, AttendanceLocation location) {
+    public AttendanceActionRequest(UUID deviceProofId) { this(deviceProofId, null); }
 }
