@@ -99,14 +99,28 @@ h2 {
   height: 40px;
   max-height: 40px;
   width: auto;
+  max-width: 100%;
+}
+
+.app-navigation {
+  display: contents;
+}
+
+.app-menu-toggle {
+  display: none;
 }
 
 .app-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
+  order: 3;
+  flex-basis: 100%;
+  min-width: 0;
 }
 
 .app-nav a {
+  white-space: nowrap;
   color: #dce8f5;
   text-decoration: none;
   padding: 0.25rem 0;
@@ -120,13 +134,98 @@ h2 {
 
 .app-identity {
   display: flex;
+  flex: 1;
   align-items: center;
+  justify-content: flex-end;
   gap: 1rem;
   margin-left: auto;
+  order: 2;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-user {
   font-size: 0.9rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-identity button {
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .app-header-inner {
+    gap: 0.75rem;
+  }
+
+  .app-title {
+    min-width: 0;
+    max-width: calc(100% - 100px);
+  }
+
+  .app-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    margin-left: auto;
+    border: 1px solid #66738b;
+    border-radius: var(--radius);
+    background: transparent;
+    color: #ffffff;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .app-navigation {
+    display: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app-navigation.is-open {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .app-nav {
+    flex-direction: column;
+    flex-basis: auto;
+    order: 0;
+    gap: 0.25rem;
+    width: 100%;
+  }
+
+  .app-nav a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .app-nav a.active {
+    background: #ffffff12;
+  }
+
+  .app-identity {
+    flex: none;
+    width: 100%;
+    margin-left: 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid #66738b;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+
+  .app-identity button {
+    min-height: 44px;
+  }
 }
 
 .app-main {
