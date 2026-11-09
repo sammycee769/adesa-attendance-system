@@ -13,7 +13,7 @@ export type DeviceStatusName =
   | 'REVOKED'
   | 'REPLACED';
 
-export type EmployeeRole = 'EMPLOYEE' | 'HR' | 'ADMIN';
+export type EmployeeRole = 'EMPLOYEE' | 'HR' | 'IT_ADMIN' | 'ADMIN';
 
 export interface DeviceStatus {
   status: DeviceStatusName;

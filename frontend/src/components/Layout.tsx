@@ -54,7 +54,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 Dashboard
               </NavLink>
               <NavLink to="/device">Device</NavLink>
-              {user && user.role !== 'EMPLOYEE' ? (
+              <NavLink to="/recurring-payments">Recurring Payments</NavLink>
+              <NavLink to="/assets">IT Asset Management</NavLink>
+              {user && (user.role === 'ADMIN' || user.role === 'HR') ? (
                 <>
                   <NavLink to="/attendance">Attendance</NavLink>
                   <NavLink to="/employees">Employees</NavLink>

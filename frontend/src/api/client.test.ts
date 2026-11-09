@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, apiRequest, readCookie, resetCsrfBootstrap } from './client';
+import { ApiError, apiDownload, apiRequest, readCookie, resetCsrfBootstrap } from './client';
 
 /** Runs a request that is expected to fail and returns the resulting error. */
 async function captureError(promise: Promise<unknown>): Promise<ApiError> {
@@ -147,5 +147,19 @@ describe('api client', () => {
 
     expect(error.status).toBe(0);
     expect(error.message).toMatch(/expected format/i);
+  });
+});
+
+describe('asset report downloads', () => {
+  it('accepts an explicitly requested CSV with the existing session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('"asset_code"\r\n"ADESA-LAP-0001"', {headers:{'Content-Type':'text/csv;charset=UTF-8'}}));
+    vi.stubGlobal('fetch',fetchMock);
+    const file=await apiDownload('/api/v1/assets/reports/export?format=csv',{contentType:'text/csv'});
+    expect(file.size).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({credentials:'include',headers:{Accept:'text/csv'}});
+  });
+  it('refuses an HTML login page returned instead of CSV', async () => {
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('<html>login</html>',{headers:{'Content-Type':'text/html'}})));
+    await expect(apiDownload('/api/v1/assets/reports/export?format=csv',{contentType:'text/csv'})).rejects.toBeInstanceOf(ApiError);
   });
 });

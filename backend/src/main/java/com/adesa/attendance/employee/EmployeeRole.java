@@ -4,5 +4,6 @@ package com.adesa.attendance.employee;
 public enum EmployeeRole {
     EMPLOYEE,
     HR,
+    IT_ADMIN,
     ADMIN
 }

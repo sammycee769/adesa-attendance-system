@@ -1,0 +1,34 @@
+# Synthetic development only. Run using scripts/payments-local-backend.sh.
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:55439/adesa_payments_local
+    username: payments_local
+    password: payments_local_demo_only
+server:
+  address: 127.0.0.1
+  port: 8083
+  servlet:
+    session:
+      cookie:
+        secure: false
+adesa:
+  account:
+    public-url: http://localhost:5176
+  mail:
+    provider: smtp
+    host: ""
+    username: ""
+    password: ""
+  payments:
+    transport: mock
+    live-approved: false
+  assets:
+    mail:
+      enabled: false
+  bootstrap:
+    admin:
+      email: ""
+      password: ""
+webauthn:
+  rp-id: localhost
+  allowed-origins: http://localhost:5176

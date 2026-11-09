@@ -119,6 +119,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Request body or parameter is malformed", request);
     }
 
+    @ExceptionHandler({org.springframework.dao.ConcurrencyFailureException.class,
+            jakarta.persistence.OptimisticLockException.class, jakarta.persistence.PessimisticLockException.class})
+    public ResponseEntity<ApiError> concurrentChange(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "The record changed or is busy. Refresh and retry.", request);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> dataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, "The request conflicts with existing data", request);

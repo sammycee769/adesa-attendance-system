@@ -1,3 +1,5 @@
+import { RecurringPaymentsPage } from './pages/payments/RecurringPaymentsPage';
+import { AssetManagementPage } from './pages/assets/AssetPage';
 import { Outlet, Route, Routes } from 'react-router-dom';
 
 import { RequireAuth } from './auth/RequireAuth';
@@ -40,6 +42,9 @@ export function App() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/assets" element={<AssetManagementPage />} />
+        <Route path="/assets/:section" element={<AssetManagementPage />} />
+        <Route path="/recurring-payments" element={<RecurringPaymentsPage />} />
         <Route path="/device" element={<DevicePage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />
 

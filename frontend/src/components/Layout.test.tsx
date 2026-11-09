@@ -20,6 +20,7 @@ describe('responsive application navigation', () => {
   it('opens the menu and closes it with Escape, returning focus to the toggle', async () => {
     const user = userEvent.setup();
     showLayout();
+    expect(screen.getByRole('link', { name: 'Recurring Payments' })).toHaveAttribute('href', '/recurring-payments');
     const menu = screen.getByRole('button', { name: 'Menu' });
     expect(menu).toHaveAttribute('aria-expanded', 'false');
     expect(menu).toHaveAttribute('aria-controls', 'app-navigation');
@@ -40,6 +41,7 @@ describe('responsive application navigation', () => {
     showLayout();
     expect(screen.queryByRole('link', { name: 'Employees' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Devices' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Recurring Payments' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Device' })).toBeInTheDocument();
   });
 });

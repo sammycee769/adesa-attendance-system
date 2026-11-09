@@ -265,6 +265,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export interface DownloadOptions {
+  contentType?: 'application/pdf' | 'text/csv';
   params?: Record<string, QueryValue>;
   signal?: AbortSignal;
   /** Deadline for the whole call. Defaults to {@link DEFAULT_TIMEOUT_MS}. */
@@ -287,7 +288,7 @@ export async function apiDownload(path: string, options: DownloadOptions = {}): 
     try {
       response = await fetch(url, {
         method: 'GET',
-        headers: { Accept: 'application/pdf' },
+        headers: { Accept: options.contentType ?? 'application/pdf' },
         credentials: 'include',
         signal: deadline.signal,
       });
@@ -311,7 +312,7 @@ export async function apiDownload(path: string, options: DownloadOptions = {}): 
     }
 
     const contentType = response.headers.get('Content-Type') ?? '';
-    if (!contentType.includes('application/pdf')) {
+    if (!contentType.includes(options.contentType ?? 'application/pdf')) {
       throw new ApiError(0, 'The report could not be downloaded in the expected format.');
     }
 

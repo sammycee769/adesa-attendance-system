@@ -146,6 +146,11 @@ webauthn:
 # See README ("Creating the first administrator").
 # ---------------------------------------------------------------------------
 adesa:
+  payments:
+    # Separate from account/asset mail. Never enabled implicitly.
+    transport: ${PAYMENTS_TRANSPORT:mock}
+    live-approved: ${PAYMENTS_LIVE_APPROVED:false}
+    poll-ms: ${PAYMENTS_POLL_MS:60000}
   account:
     # Public base URL of the deployed frontend. Absolute setup/recovery links
     # are built ONLY from this value, never from the incoming Host header.

@@ -22,6 +22,7 @@ import { PASSWORD_HINT, validatePassword } from '../../utils/password';
 const ROLE_OPTIONS: { value: EmployeeRole; label: string }[] = [
   { value: 'EMPLOYEE', label: 'Employee' },
   { value: 'HR', label: 'HR' },
+  { value: 'IT_ADMIN', label: 'IT administrator' },
   { value: 'ADMIN', label: 'Administrator' },
 ];
 
