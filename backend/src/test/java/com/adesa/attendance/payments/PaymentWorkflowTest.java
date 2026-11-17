@@ -191,4 +191,17 @@ class PaymentWorkflowTest {
   service.settings(true,"","admin");service.db.update("update payment_configs set owner_employee_id=null");worker.tick(due);
   assertThat(service.history()).isEmpty();verify(transport,never()).deliver(any());
  }
+ @Test void enablingLiveDeliveryDoesNotResendMockCapturedMonths() {
+  service.settings(true,"","admin");worker.tick(due);
+  var old=service.history().getFirst();UUID oldId=(UUID)old.get("id");
+  assertThat(old.get("status")).isEqualTo("MOCK_CAPTURED");
+  when(transport.live()).thenReturn(true);
+  doReturn(new PaymentTransport.Receipt("synthetic-live-receipt",false)).when(transport).deliver(any());
+  new PaymentDispatcher(service).tick(due.plusSeconds(86400));
+  verify(transport,times(1)).deliver(any());
+  worker.tick(Instant.parse("2026-11-20T08:00:00Z"));
+  assertThat(service.history()).filteredOn(r->r.get("id").equals(oldId)).allSatisfy(r->{assertThat(r.get("status")).isEqualTo("MOCK_CAPTURED");assertThat(r.get("attempts")).isEqualTo(1);});
+  assertThat(service.history()).filteredOn(r->r.get("config_id").toString().endsWith("000000000002")).allSatisfy(r->{assertThat(r.get("status")).isEqualTo("SENT");assertThat(r.get("provider_message_id")).isEqualTo("synthetic-live-receipt");});
+  verify(transport,times(2)).deliver(any());
+ }
 }

@@ -65,6 +65,11 @@ webauthn:
   user-verification-required: ${WEBAUTHN_USER_VERIFICATION_REQUIRED:true}
 
 adesa:
+  payments:
+    # Owner approved real delivery for future scheduled requests on 2026-11-17.
+    # Local/test profiles keep the mock defaults in application.yml.
+    transport: ${PAYMENTS_TRANSPORT:zoho}
+    live-approved: ${PAYMENTS_LIVE_APPROVED:true}
   account:
     # APP_PUBLIC_URL has no safe default in production: the validator requires an
     # HTTPS URL that matches an allowed WebAuthn origin, so account-setup and
