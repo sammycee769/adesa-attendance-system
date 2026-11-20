@@ -123,17 +123,18 @@ class AttendanceGeolocationTest {
         assertThat(consumed(proof)).isFalse();
     }
 
-    @Test void sixtyMetresIsDeniedForSignInAndSignOutWithoutChangingAttendance() throws Exception {
-        // Approximately 60m north of the pin: within the old 100m radius, outside the new 50m radius.
-        double sixtyMetresNorth = 6.6412393 + Math.toDegrees(60.0 / 6_371_008.8);
-        action("sign-in", "203.0.113.22", SECRET, proof, fix(sixtyMetresNorth))
-                .andExpect(status().isForbidden());
+    @Test void beyondOneHundredMetresIsDeniedForBothActionsWithoutChangingAttendance() throws Exception {
+        double outside = 6.6412393 + Math.toDegrees(100.1 / 6_371_008.8);
+        action("sign-in", "203.0.113.22", SECRET, proof, fix(outside))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Your location is outside the permitted office attendance radius."));
         assertThat(fixtures.countRecords(employee)).isZero();
         assertThat(consumed(proof)).isFalse();
-        action("sign-in", "203.0.113.22", SECRET, proof, fix(6.6412393)).andExpect(status().isCreated());
+        action("sign-in", "203.0.113.22", SECRET, proof, fix(6.6412393 + Math.toDegrees(89.9 / 6_371_008.8))).andExpect(status().isCreated());
         UUID outProof = fixtures.issueProof(employee, device, session.getId());
-        action("sign-out", "203.0.113.22", SECRET, outProof, fix(sixtyMetresNorth))
-                .andExpect(status().isForbidden());
+        action("sign-out", "203.0.113.22", SECRET, outProof, fix(outside))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Your location is outside the permitted office attendance radius."));
         assertThat(consumed(outProof)).isFalse();
         assertThat(jdbc.queryForObject("SELECT sign_out_at IS NULL FROM attendance_records WHERE employee_id=?", Boolean.class, employee))
                 .isTrue();

@@ -38,7 +38,7 @@ attendance:
     enabled: ${ATTENDANCE_GEOLOCATION_ENABLED:true}
     latitude: ${ATTENDANCE_OFFICE_LATITUDE:6.6412393}
     longitude: ${ATTENDANCE_OFFICE_LONGITUDE:3.3711820}
-    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:50}
+    radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:100}
   network:
     enforcement-enabled: ${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
     local-development-bypass: ${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}

@@ -2,7 +2,7 @@
 
 Both clock-in and clock-out require a fresh browser location inside the
 owner-approved office geofence. The production defaults use the existing pin
-and 50-metre radius. The browser requests a high-accuracy reading with a
+and 100-metre radius. The browser requests a high-accuracy reading with a
 15-second acquisition timeout and checks its timestamp, coordinates, and
 accuracy before posting attendance. The app acquires location on demand and
 keeps no copy for subsequent attempts.
@@ -22,7 +22,7 @@ ATTENDANCE_GEOLOCATION_ENABLED=true
 ATTENDANCE_AUTHENTICATED_INGRESS_ENABLED=true
 ATTENDANCE_OFFICE_LATITUDE=6.6412393
 ATTENDANCE_OFFICE_LONGITUDE=3.3711820
-ATTENDANCE_OFFICE_RADIUS_METRES=50
+ATTENDANCE_OFFICE_RADIUS_METRES=100
 ATTENDANCE_LOCATION_MAX_ACCURACY_METRES=50
 ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=false
 ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false

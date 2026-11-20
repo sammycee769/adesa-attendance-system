@@ -115,7 +115,7 @@ attendance remains restricted to authenticated ingress.
 
 ## Vercel (owner applies after approval)
 
-Use the existing Vite project with Root Directory `frontend`, build command
+Run the CLI from `frontend` for the existing Vite project with Root Directory `.`, build command
 `npm run build`, output directory `dist`, and Node 24. Use
 `VITE_API_BASE_URL=https://adesa-attendance-frontend.vercel.app` or leave it
 empty in Production. Browser requests reach the

@@ -25,17 +25,22 @@ class GeolocationPolicyTest {
         return new AttendanceLocation(latitude, longitude, accuracy, System.currentTimeMillis());
     }
 
+    private double northOfOffice(double metres) {
+        return 6.6412393 + Math.toDegrees(metres / 6_371_008.8);
+    }
+
     @Test void acceptsAnAccurateOfficeFixAndRejectsOutsideOrUncertainFixes() {
         var policy = policy(settings());
         assertThatCode(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 15))).doesNotThrowAnyException();
         assertThatCode(() -> policy.requireInsideOffice(fix(6.6414393, 3.371182, 10))).doesNotThrowAnyException();
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6418393, 3.371182, 5)))
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(northOfOffice(100.1), 3.371182, 5)))
                 .isInstanceOf(ForbiddenException.class).hasMessageContaining("outside the permitted");
         assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.65, 3.38, 5))).isInstanceOf(ForbiddenException.class);
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 200)))
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 50.1)))
                 .isInstanceOf(ForbiddenException.class).hasMessageContaining("too imprecise");
-        // About 40m from the pin plus 20m uncertainty must not enlarge the 50m boundary.
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6415993, 3.371182, 20)))
+        assertThatCode(() -> policy.requireInsideOffice(fix(northOfOffice(79.9), 3.371182, 20)))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(northOfOffice(80.1), 3.371182, 20)))
                 .isInstanceOf(ForbiddenException.class).hasMessageContaining("too imprecise");
     }
 
