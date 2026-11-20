@@ -4,6 +4,8 @@ import { resetCsrfBootstrap } from './client';
 
 describe('Attendance geolocation', () => {
   const locate = vi.fn();
+  const watch = vi.fn();
+  const clearWatch = vi.fn();
   const fetch = vi.fn();
   const now = new Date('2026-11-20T09:00:00Z');
   const position = (timestamp = Date.now(), accuracy = 12, latitude = 6.6412393) => ({
@@ -12,18 +14,20 @@ describe('Attendance geolocation', () => {
   });
 
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(now);
     resetCsrfBootstrap();
     document.cookie = 'XSRF-TOKEN=test-csrf';
     locate.mockReset();
+    watch.mockReset();
+    clearWatch.mockReset();
     fetch.mockReset().mockImplementation((_url, options) => Promise.resolve(
       options.method === 'POST'
         ? new Response('{"id":"record"}')
         : new Response('{"maxAccuracyMetres":40}'),
     ));
     vi.stubGlobal('fetch', fetch);
-    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: locate } });
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: locate, watchPosition: watch, clearWatch } });
   });
 
   afterEach(() => {
@@ -53,14 +57,42 @@ describe('Attendance geolocation', () => {
     ]);
   });
 
-  it('rejects a previously returned fix even when it is less than a second old', async () => {
+  it('waits for a fresh reading when Safari returns the previous attempt’s coordinates first', async () => {
     const oldFix = position();
     locate.mockImplementation(success => success(oldFix));
     await signIn('in-proof');
 
     vi.setSystemTime(now.getTime() + 500);
-    await expect(signOut('out-proof')).rejects.toThrow(/out of date/);
-    expect(fetch.mock.calls.filter(([, options]) => options.method === 'POST')).toHaveLength(1);
+    watch.mockImplementation(success => {
+      success(oldFix);
+      success(position(Date.now() + 500));
+      success(position(Date.now(), 8, 6.64124));
+      return 0;
+    });
+    await expect(signOut('out-proof')).resolves.toEqual({ id: 'record' });
+
+    expect(watch).toHaveBeenCalledWith(expect.any(Function), expect.any(Function),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    expect(clearWatch).toHaveBeenCalledWith(0);
+    const posts = fetch.mock.calls.filter(([, options]) => options.method === 'POST');
+    expect(posts).toHaveLength(2);
+    expect(JSON.parse(posts[1]?.[1].body).location).toMatchObject({
+      latitude: 6.64124, accuracyMetres: 8, timestampMillis: Date.now(),
+    });
+  });
+
+  it('times out and submits nothing when the browser only returns stale readings', async () => {
+    const oldFix = position(Date.now() - 500);
+    locate.mockImplementation(success => success(oldFix));
+    watch.mockImplementation(success => {
+      success(oldFix);
+      return 4;
+    });
+    const failure = expect(signIn('proof')).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await failure;
+    expect(clearWatch).toHaveBeenCalledWith(4);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each([0, 41, Number.NaN])('rejects accuracy of %s against the configured limit', async accuracy => {
@@ -71,7 +103,11 @@ describe('Attendance geolocation', () => {
 
   it.each([Number.NaN, Infinity, 1])('rejects an invalid timestamp offset of %s', async offset => {
     locate.mockImplementation(success => success(position(Date.now() + offset)));
-    await expect(signOut('proof')).rejects.toThrow(/invalid timestamp/);
+    watch.mockReturnValue(8);
+    const failure = expect(signOut('proof')).rejects.toThrow(/invalid timestamp/);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await failure;
+    expect(clearWatch).toHaveBeenCalledWith(8);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 

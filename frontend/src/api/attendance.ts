@@ -36,38 +36,78 @@ const locationTimeoutMillis = 15_000;
 const preciseLocationHelp =
   'On iPhone or iPad, open Settings > Privacy & Security > Location Services > Safari Websites and turn on Precise Location.';
 
-function currentLocation(maxAccuracyMetres: number): Promise<LocationFix> {
-  if (!navigator.geolocation) {
-    return Promise.reject(new ApiError(403, 'Location is unavailable in this browser. Enable Location Services and try again.'));
+const freshPositionOptions: PositionOptions = {
+  enableHighAccuracy: true,
+  maximumAge: 0,
+  timeout: locationTimeoutMillis,
+};
+
+function locationError(code: number): ApiError {
+  if (code === 1) {
+    return new ApiError(403, 'Location permission was denied. Allow location access for this website and try again.');
   }
+  if (code === 3) {
+    return new ApiError(403, 'The location request timed out. Move to a spot with better reception and try again.');
+  }
+  return new ApiError(403, 'Location is unavailable. Enable Location Services and try again.');
+}
+
+function positionFreshness(position: GeolocationPosition, requestedAt: number): 'fresh' | 'stale' | 'invalid' {
+  const now = Date.now();
+  if (!Number.isSafeInteger(position.timestamp) || position.timestamp > now) return 'invalid';
+  return position.timestamp >= requestedAt && position.timestamp >= now - locationTimeoutMillis ? 'fresh' : 'stale';
+}
+
+async function waitForFreshPosition(
+  geolocation: Geolocation,
+  requestedAt: number,
+  sawInvalidTimestamp: boolean,
+): Promise<GeolocationPosition> {
+  let watchId: number | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<GeolocationPosition>((resolve, reject) => {
+      const timedOut = () => reject(sawInvalidTimestamp
+        ? new ApiError(403, 'The location reading has an invalid timestamp. Check that your phone sets its date and time automatically, then try again.')
+        : locationError(3));
+      timer = setTimeout(timedOut, locationTimeoutMillis);
+      watchId = geolocation.watchPosition(position => {
+        const freshness = positionFreshness(position, requestedAt);
+        if (freshness === 'fresh') resolve(position);
+        if (freshness === 'invalid') sawInvalidTimestamp = true;
+      }, error => {
+        if (error.code === 3) timedOut();
+        else reject(locationError(error.code));
+      }, freshPositionOptions);
+    });
+  } finally {
+    clearTimeout(timer);
+    if (watchId !== undefined) geolocation.clearWatch(watchId);
+  }
+}
+
+async function currentLocation(maxAccuracyMetres: number): Promise<LocationFix> {
+  const geolocation = navigator.geolocation;
+  if (!geolocation) throw locationError(2);
+
   const requestedAt = Date.now();
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      ({ coords: { latitude, longitude, accuracy }, timestamp }) => {
-        const now = Date.now();
-        if (!Number.isFinite(latitude) || Math.abs(latitude) > 90
-            || !Number.isFinite(longitude) || Math.abs(longitude) > 180) {
-          reject(new ApiError(403, 'Location is unavailable. Enable Location Services and try again.'));
-        } else if (!Number.isSafeInteger(timestamp) || timestamp < requestedAt
-            || timestamp < now - locationTimeoutMillis || timestamp > now) {
-          reject(new ApiError(403, 'Your location reading is out of date or has an invalid timestamp. Try again for a fresh reading.'));
-        } else if (!Number.isFinite(accuracy) || accuracy <= 0 || accuracy > maxAccuracyMetres) {
-          reject(new ApiError(403, `Your location reading is too imprecise for attendance. ${preciseLocationHelp} Move to a spot with better reception and try again.`));
-        } else {
-          resolve({ latitude, longitude, accuracyMetres: accuracy, timestampMillis: timestamp });
-        }
-      },
-      ({ code }) => {
-        const message = code === 1
-          ? 'Location permission was denied. Allow location access for this website and try again.'
-          : code === 3
-            ? 'The location request timed out. Move to a spot with better reception and try again.'
-            : 'Location is unavailable. Enable Location Services and try again.';
-        reject(new ApiError(403, message));
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: locationTimeoutMillis },
-    );
+  let position = await new Promise<GeolocationPosition>((resolve, reject) => {
+    geolocation.getCurrentPosition(resolve, error => reject(locationError(error.code)), freshPositionOptions);
   });
+  const freshness = positionFreshness(position, requestedAt);
+  if (freshness !== 'fresh') {
+    // The location provider can return its most recent fix before it has acquired a new one.
+    position = await waitForFreshPosition(geolocation, requestedAt, freshness === 'invalid');
+  }
+  const { coords: { latitude, longitude, accuracy }, timestamp } = position;
+  if (!Number.isFinite(latitude) || Math.abs(latitude) > 90
+      || !Number.isFinite(longitude) || Math.abs(longitude) > 180) {
+    throw locationError(2);
+  }
+  if (!Number.isFinite(accuracy) || accuracy <= 0 || accuracy > maxAccuracyMetres) {
+    throw new ApiError(403, `Your location reading is too imprecise for attendance. ${preciseLocationHelp} Move to a spot with better reception and try again.`);
+  }
+  return { latitude, longitude, accuracyMetres: accuracy, timestampMillis: timestamp };
 }
 
 async function recordAttendance(action: 'sign-in' | 'sign-out', deviceProofId: string): Promise<AttendanceRecord> {
