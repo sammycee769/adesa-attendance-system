@@ -11,7 +11,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 class GeolocationPolicyTest {
     private AttendanceProperties settings() {
         var p = new AttendanceProperties();
-        p.getNetwork().setEnforcementEnabled(true);
+        p.getNetwork().setEnforcementEnabled(false);
         p.getNetwork().setAllowedIpv4(List.of("198.51.100.174/32"));
         p.getNetwork().setAuthenticatedIngressEnabled(true);
         p.getNetwork().setIngressSharedSecret("a".repeat(64));
@@ -29,11 +29,14 @@ class GeolocationPolicyTest {
         var policy = policy(settings());
         assertThatCode(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 15))).doesNotThrowAnyException();
         assertThatCode(() -> policy.requireInsideOffice(fix(6.6414393, 3.371182, 10))).doesNotThrowAnyException();
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6418393, 3.371182, 5))).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6418393, 3.371182, 5)))
+                .isInstanceOf(ForbiddenException.class).hasMessageContaining("outside the permitted");
         assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.65, 3.38, 5))).isInstanceOf(ForbiddenException.class);
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 200))).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6412393, 3.371182, 200)))
+                .isInstanceOf(ForbiddenException.class).hasMessageContaining("too imprecise");
         // About 40m from the pin plus 20m uncertainty must not enlarge the 50m boundary.
-        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6415993, 3.371182, 20))).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> policy.requireInsideOffice(fix(6.6415993, 3.371182, 20)))
+                .isInstanceOf(ForbiddenException.class).hasMessageContaining("too imprecise");
     }
 
     @Test void requiresFreshFiniteCompleteCoordinates() {
@@ -42,7 +45,7 @@ class GeolocationPolicyTest {
         for (var fix : List.of(
                 new AttendanceLocation(null, 3.371182, 10.0, System.currentTimeMillis()),
                 fix(Double.NaN, 3.371182, 10), fix(91, 3.371182, 10), fix(6.6412393, 181, 10),
-                fix(6.6412393, 3.371182, Double.NaN), fix(6.6412393, 3.371182, -1),
+                fix(6.6412393, 3.371182, Double.NaN), fix(6.6412393, 3.371182, -1), fix(6.6412393, 3.371182, 0),
                 new AttendanceLocation(6.6412393, 3.371182, 10.0, null),
                 new AttendanceLocation(6.6412393, 3.371182, 10.0, System.currentTimeMillis() - 120_000),
                 new AttendanceLocation(6.6412393, 3.371182, 10.0, System.currentTimeMillis() + 60_000))) {
@@ -50,21 +53,19 @@ class GeolocationPolicyTest {
         }
     }
 
-    @Test void fallbackRequiresTheRealGatewayAndCanBeDisabled() {
+    @Test void geolocationRequiresTheAuthenticatedGateway() {
         var p = settings();
         var policy = policy(p);
         var request = new MockHttpServletRequest();
         request.addHeader(ClientIpResolver.INGRESS_IP_HEADER, "2001:db8::1");
-        assertThat(policy.canFallback(request)).isFalse();
+        assertThatThrownBy(() -> policy.requireAuthenticatedIngress(request)).isInstanceOf(ForbiddenException.class);
         request.addHeader(ClientIpResolver.INGRESS_KEY_HEADER, "a".repeat(64));
-        assertThat(policy.canFallback(request)).isTrue();
+        assertThatCode(() -> policy.requireAuthenticatedIngress(request)).doesNotThrowAnyException();
         request.addHeader(ClientIpResolver.INGRESS_KEY_HEADER, "a".repeat(64));
-        assertThat(policy.canFallback(request)).isFalse();
+        assertThatThrownBy(() -> policy.requireAuthenticatedIngress(request)).isInstanceOf(ForbiddenException.class);
         request.removeHeader(ClientIpResolver.INGRESS_KEY_HEADER);
         request.addHeader(ClientIpResolver.INGRESS_KEY_HEADER, "a".repeat(64));
-        assertThat(policy.canFallback(request)).isTrue();
-        p.getGeolocation().setEnabled(false);
-        assertThat(policy.canFallback(request)).isFalse();
+        assertThatCode(() -> policy.requireAuthenticatedIngress(request)).doesNotThrowAnyException();
     }
 
     @Test void invalidConfigurationFailsAtStartup() {

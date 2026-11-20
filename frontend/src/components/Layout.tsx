@@ -84,7 +84,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="app-main">{children}</main>
 
       <footer className="app-footer">
-        <p>Attendance can only be recorded from the approved ADESA office network.</p>
+        <p>Attendance can only be recorded at the ADESA office.</p>
       </footer>
     </div>
   );

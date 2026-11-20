@@ -34,7 +34,7 @@ export default {
     // Only Vercel supplies the trusted incoming header. No local/public proxy fallback.
     if (env.VERCEL !== '1') return deny(403);
     const clientIp = request.headers.get('x-vercel-forwarded-for');
-    // IPv6 may administer/sign in; the IPv4-only backend policy rejects attendance.
+    // Preserve IPv4 and IPv6 for authenticated ingress. Spring applies the attendance policy.
     if (!clientAddress(clientIp)) return deny(403);
     const headers = new Headers(request.headers);
     for (const name of [KEY, IP, 'X-Forwarded-For', 'True-Client-IP',

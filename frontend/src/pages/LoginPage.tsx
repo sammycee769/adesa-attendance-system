@@ -99,7 +99,7 @@ export function LoginPage() {
         </form>
 
         <p className="hint">
-          Attendance can only be recorded from the ADESA office network, and only with an approved device.
+          Attendance can only be recorded at the ADESA office, and only with an approved device.
         </p>
       </section>
     </div>

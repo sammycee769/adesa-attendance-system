@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from './client';
+import { ApiError, apiRequest, ensureCsrfToken } from './client';
 import type { AttendanceHistory, AttendanceRecord, AttendanceStatus } from './types';
 
 /**
@@ -31,35 +31,48 @@ interface LocationFix {
   timestampMillis: number;
 }
 
-function currentLocation(): Promise<LocationFix> {
+const locationTimeoutMillis = 15_000;
+
+const preciseLocationHelp =
+  'On iPhone or iPad, open Settings > Privacy & Security > Location Services > Safari Websites and turn on Precise Location.';
+
+function currentLocation(maxAccuracyMetres: number): Promise<LocationFix> {
   if (!navigator.geolocation) {
-    return Promise.reject(new ApiError(403, 'Location is unavailable in this browser. Use your phone with location services enabled.'));
+    return Promise.reject(new ApiError(403, 'Location is unavailable in this browser. Enable Location Services and try again.'));
   }
+  const requestedAt = Date.now();
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      position => resolve({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracyMetres: position.coords.accuracy,
-        timestampMillis: position.timestamp,
-      }),
-      error => reject(new ApiError(403, error.code === 1
-        ? 'Location permission is needed outside the approved office network. Allow precise location in your browser and try again.'
-        : 'Your location could not be obtained. Enable precise location and try again.')),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
+      ({ coords: { latitude, longitude, accuracy }, timestamp }) => {
+        const now = Date.now();
+        if (!Number.isFinite(latitude) || Math.abs(latitude) > 90
+            || !Number.isFinite(longitude) || Math.abs(longitude) > 180) {
+          reject(new ApiError(403, 'Location is unavailable. Enable Location Services and try again.'));
+        } else if (!Number.isSafeInteger(timestamp) || timestamp < requestedAt
+            || timestamp < now - locationTimeoutMillis || timestamp > now) {
+          reject(new ApiError(403, 'Your location reading is out of date or has an invalid timestamp. Try again for a fresh reading.'));
+        } else if (!Number.isFinite(accuracy) || accuracy <= 0 || accuracy > maxAccuracyMetres) {
+          reject(new ApiError(403, `Your location reading is too imprecise for attendance. ${preciseLocationHelp} Move to a spot with better reception and try again.`));
+        } else {
+          resolve({ latitude, longitude, accuracyMetres: accuracy, timestampMillis: timestamp });
+        }
+      },
+      ({ code }) => {
+        const message = code === 1
+          ? 'Location permission was denied. Allow location access for this website and try again.'
+          : code === 3
+            ? 'The location request timed out. Move to a spot with better reception and try again.'
+            : 'Location is unavailable. Enable Location Services and try again.';
+        reject(new ApiError(403, message));
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: locationTimeoutMillis },
     );
   });
 }
 
 async function recordAttendance(action: 'sign-in' | 'sign-out', deviceProofId: string): Promise<AttendanceRecord> {
-  const path = `/api/v1/attendance/${action}`;
-  try {
-    return await apiRequest<AttendanceRecord>(path, { method: 'POST', body: { deviceProofId } });
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 403 || error.code !== 'LOCATION_REQUIRED') throw error;
-  }
-  const location = await currentLocation();
-  // The first attempt performed no attendance write and did not consume the proof.
-  // Retry once; a final denial must not create a location prompt/retry loop.
-  return apiRequest<AttendanceRecord>(path, { method: 'POST', body: { deviceProofId, location } });
+  const { maxAccuracyMetres } = await apiRequest<{ maxAccuracyMetres: number }>('/api/v1/attendance/location-policy');
+  await ensureCsrfToken();
+  const location = await currentLocation(maxAccuracyMetres);
+  return apiRequest<AttendanceRecord>(`/api/v1/attendance/${action}`, { method: 'POST', body: { deviceProofId, location } });
 }

@@ -32,6 +32,11 @@ public class OfficeNetworkPolicy {
     private final List<IPAddress> approvedNetworks;
 
     public OfficeNetworkPolicy(AttendanceProperties properties) {
+        if (properties.getGeolocation().isEnabled()) {
+            this.enforcementEnabled = false;
+            this.approvedNetworks = List.of();
+            return;
+        }
         this.enforcementEnabled = properties.getNetwork().isEnforcementEnabled();
         this.approvedNetworks = NetworkAddresses.parseAll(
                 properties.getNetwork().getAllowedIpv4(), "attendance.network.allowed-ipv4");

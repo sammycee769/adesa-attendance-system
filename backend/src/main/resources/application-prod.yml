@@ -1,9 +1,7 @@
 # Production profile.
 # Activated with: --spring.profiles.active=prod (or SPRING_PROFILES_ACTIVE=prod)
 #
-# Startup validation (ProductionSafetyValidator) REFUSES to start this profile
-# unless the attendance network restriction is enabled and approved CIDRs are
-# configured. This prevents an accidental network-restriction bypass in prod.
+# Production attendance defaults to geolocation with authenticated ingress.
 #
 # It also refuses to start with the development database password, a non-Secure
 # session cookie, a placeholder WebAuthn RP ID/origin, or disabled user
@@ -35,24 +33,16 @@ server:
         same-site: ${SESSION_COOKIE_SAME_SITE:none}
 
 attendance:
-  # Owner-approved pin and radius. IP is checked first; location is requested only on mismatch.
+  # Owner-approved pin and radius for clock-in and clock-out.
   geolocation:
     enabled: ${ATTENDANCE_GEOLOCATION_ENABLED:true}
     latitude: ${ATTENDANCE_OFFICE_LATITUDE:6.6412393}
     longitude: ${ATTENDANCE_OFFICE_LONGITUDE:3.3711820}
     radius-metres: ${ATTENDANCE_OFFICE_RADIUS_METRES:50}
   network:
-    # Enforcement is never switched on implicitly: the operator must enable it
-    # explicitly, and only after the office client address has been verified
-    # (README: "Verifying the office address before enforcement is switched on").
-    # While it is off this profile refuses to start, so production can never run
-    # without the office-network restriction.
     enforcement-enabled: ${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
-    # The local-development bypass must never be on in production.
     local-development-bypass: ${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}
-    # No production office IP is assumed. This must be supplied after the
-    # actual client path has been verified.
-    allowed-ipv4: ${ATTENDANCE_ALLOWED_IPV4}
+    allowed-ipv4: ${ATTENDANCE_ALLOWED_IPV4:}
     # Forwarded headers remain untrusted unless Render's actual proxy path is
     # verified and its stable peer address is explicitly configured.
     trusted-proxies: ${ATTENDANCE_TRUSTED_PROXY_ADDRESSES:}

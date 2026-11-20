@@ -19,9 +19,8 @@ import org.springframework.util.StringUtils;
  * <p>When the {@code prod} profile is active:
  *
  * <ul>
- *   <li>the attendance office-network restriction must be enabled, the
- *       development bypass must be off, and at least one approved CIDR must be
- *       configured;</li>
+ *   <li>attendance must use authenticated geolocation or an enabled office-network
+ *       policy with an approved CIDR. The development bypass must be off;</li>
  *   <li>the allowlist may not be broader than a {@code /24}, and trusted
  *       proxies must be single host addresses, so a {@code 0.0.0.0/0} (or a
  *       whole-network proxy) cannot silently disable the control;</li>
@@ -192,6 +191,10 @@ public class ProductionSafetyValidator implements InitializingBean {
     }
 
     private void validateNetwork(AttendanceProperties.Network network) {
+        boolean geolocationEnabled = attendanceProperties.getGeolocation().isEnabled();
+        if (geolocationEnabled && !network.isAuthenticatedIngressEnabled()) {
+            throw new IllegalStateException("Refusing to start: the attendance location policy requires authenticated ingress");
+        }
         if (network.isAuthenticatedIngressEnabled()) {
             if (!network.getIngressSharedSecret().matches("[0-9a-f]{64}")
                     || !network.getTrustedProxies().isEmpty()) {
@@ -199,7 +202,7 @@ public class ProductionSafetyValidator implements InitializingBean {
                         + "64-character hex secret and no trusted XFF proxies");
             }
         }
-        if (!network.isEnforcementEnabled()) {
+        if (!geolocationEnabled && !network.isEnforcementEnabled()) {
             throw new IllegalStateException(
                     "Refusing to start: the 'prod' profile is active but "
                             + "attendance.network.enforcement-enabled is false. Attendance must only "
@@ -214,6 +217,9 @@ public class ProductionSafetyValidator implements InitializingBean {
                             + "attendance.network.local-development-bypass is set. The bypass exists only "
                             + "for local development machines and would disable the office-network "
                             + "restriction in production.");
+        }
+        if (geolocationEnabled) {
+            return;
         }
         if (network.getAllowedIpv4().stream().anyMatch(cidr -> !StringUtils.hasText(cidr))) {
             throw new IllegalStateException(

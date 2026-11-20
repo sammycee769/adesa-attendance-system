@@ -1,13 +1,9 @@
 # ADESA HQ Attendance Management System
 
-Secure employee attendance system: WebAuthn/passkey registered-device
-authentication, office-network restriction for attendance actions, and
-role-based access (EMPLOYEE / HR / ADMIN).
-
-**Status: Phases 1–8 complete. Phase 9 (pilot) is ready to start once the
-checklist gates are met. Office-network enforcement is implemented and verified
-at the code level; the on-site network verification (from the office and from a
-genuinely different network) is still outstanding and is an ADESA IT task.**
+Secure employee attendance system with WebAuthn/passkey authentication,
+office geofencing, and role-based access (EMPLOYEE / HR / ADMIN).
+Production location settings and physical-device checks are documented in
+[Office location for attendance](docs/OFFICE_LOCATION_FALLBACK.md).
 
 The deployment checklist — what is verified automatically and what still needs a
 manual test on the target infrastructure — is in
@@ -203,9 +199,8 @@ Security rules the frontend follows (the backend enforces all of them again):
 - Every attendance action is preceded by a fresh WebAuthn check of the
   approved device. The single-use device proof travels with the action and is
   consumed by the backend.
-- The office-network restriction is enforced by the backend. When it refuses an
-  action, the employee sees the reason ("… approved ADESA office network") and
-  a hint to continue from the office connection.
+- The browser obtains and checks a fresh position for each attendance action.
+  The backend verifies the position against the configured office geofence.
 - The browser stores no secrets: no password, no token, no credential. The
   session lives in an `HttpOnly` cookie and every state-changing request
   carries the CSRF token.
@@ -222,9 +217,10 @@ Key settings:
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | Active Spring profile | Set to `prod` on Render |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL connection | Required in prod; use the selected Supabase JDBC endpoint with TLS |
-| `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED` | Office-network enforcement switch (`attendance.network.enforcement-enabled`) | Off by default; must be `true` in prod |
-| `ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS` | Explicit local-development override (`attendance.network.local-development-bypass`) | Off by default. When enforcement is off **and** this is off, attendance FAILS CLOSED (HTTP 403). Refused whenever the `prod` profile is active |
-| `ATTENDANCE_ALLOWED_IPV4` | Approved office egress CIDRs, IPv4 only (`attendance.network.allowed-ipv4`) | Required explicitly in prod; use the narrow address confirmed from the Render service after office-path verification |
+| `ATTENDANCE_GEOLOCATION_ENABLED` | Office geofence for both attendance actions | On by default in prod. Requires authenticated ingress |
+| `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED` | Legacy office-network enforcement | Off by default. Used when geolocation is disabled |
+| `ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS` | Explicit local-development override (`attendance.network.local-development-bypass`) | Off by default. Refused whenever the `prod` profile is active |
+| `ATTENDANCE_ALLOWED_IPV4` | Approved office egress CIDRs, IPv4 only (`attendance.network.allowed-ipv4`) | Required only for the legacy office-network policy when enforcement is enabled |
 | `ATTENDANCE_TRUSTED_PROXY_ADDRESSES` | Proxies whose `X-Forwarded-For` may be trusted (`attendance.network.trusted-proxies`) | Leave empty unless the actual Render peer, header behavior, and stable proxy address have been verified |
 | `ATTENDANCE_CLIENT_IP_HEADER` | Header carrying the forwarded client address | Default `X-Forwarded-For` |
 | `SECURITY_LOG_FILE` | Development-only restricted security log | Production security events go to stderr; no writable log directory is required |
@@ -238,21 +234,17 @@ Key settings:
 | `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_SMTP_AUTH` | SMTP authentication | Authentication defaults on; store credentials as Render secrets |
 | `MAIL_SMTP_STARTTLS_ENABLE`, `MAIL_SMTP_SSL_ENABLE` | SMTP transport encryption | Exactly one enabled; STARTTLS for port 587 or implicit TLS for port 465 |
 | `ADESA_BOOTSTRAP_ADMIN_EMPLOYEE_NUMBER`, `ADESA_BOOTSTRAP_ADMIN_FULL_NAME`, `ADESA_BOOTSTRAP_ADMIN_EMAIL`, `ADESA_BOOTSTRAP_ADMIN_PASSWORD` | One-time first-admin bootstrap | Only before any admin/bootstrap audit exists; unset after creation and rotate at first login |
-| `VITE_API_BASE_URL` | Frontend API prefix | Actual backend HTTPS origin for Vercel, without `/api/v1`; never put secrets in `VITE_` variables |
+| `VITE_API_BASE_URL` | Browser API prefix | Empty or the public frontend origin in Vercel production. Requests use the same-origin gateway |
 | `PORT` | Render's HTTP port | Supplied by Render; Docker startup binds to it |
 | `SESSION_IDLE_TIMEOUT`, `SESSION_ABSOLUTE_TIMEOUT` | Session idle / absolute lifetime | Defaults `30m` / `12h` |
 | `LOGIN_MAX_FAILURES`, `LOGIN_WINDOW` | Failed-login lockout window | HTTP 429 when exceeded |
 | `WEBAUTHN_CHALLENGE_TTL`, `DEVICE_PROOF_TTL` | Single-use ceremony lifetimes | Defaults `2m` |
 | `SESSION_COOKIE_SECURE` | Session cookie `Secure` flag | Forced `true` in the `prod` profile |
 
-### Office-network policy (production values require hosted verification)
+### Legacy office-network policy
 
-The application does not assume that an address previously observed at ADESA
-is the client address Render will deliver to this container. The office egress
-address, Render proxy path, and forwarding-header behavior must be verified
-against the deployed service by ADESA IT before configuring the production
-allowlist. The `prod` profile requires an explicit allowlist and refuses
-startup if enforcement is disabled; it has no production default CIDR.
+These settings apply in environments with geolocation disabled. For production,
+see [Office location for attendance](docs/OFFICE_LOCATION_FALLBACK.md).
 
 **Configuration** (environment, never hardcoded):
 
@@ -339,7 +331,7 @@ business audit trail. Restrict access to captured security logs to authorized
 operations/IT staff; the business audit trail keeps the generic reason
 `NETWORK_NOT_APPROVED` and no network detail.
 
-### Verifying the office address before enforcement is switched on
+### Verifying the office address in a legacy network-only environment
 
 Enforcement is switched on only after the application has been observed to
 resolve the office public address for a request that really came through the
@@ -361,6 +353,7 @@ Safe verification order:
 1. Use a non-production Render service with a separate scratch database and
    the same service topology intended for production. Set
    `SPRING_PROFILES_ACTIVE=prod`,
+   `ATTENDANCE_GEOLOCATION_ENABLED=false`,
    `ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true`,
    `ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false`, and a reserved
    documentation-only CIDR such as `192.0.2.1/32` as a temporary deny-all
@@ -423,12 +416,13 @@ verified from this repository. Prefer direct or session-mode connections unless
 the chosen transaction pooler is proven compatible with Flyway, Hibernate, and
 prepared statements.
 
-For Vercel, set `VITE_API_BASE_URL` to the actual backend HTTPS origin without
-`/api/v1`. The backend allows credentialed CORS only from `APP_PUBLIC_URL`.
-The CSRF bootstrap returns JSON plus a backend cookie; the frontend echoes the
-JSON token as a header. Production cookies are Secure and default to SameSite=None.
-Browsers may block cookies across unrelated `vercel.app` and `onrender.com` sites;
-prefer sibling custom domains and set `SESSION_COOKIE_SAME_SITE=lax` in that case.
+For Vercel production, use an empty `VITE_API_BASE_URL` or the exact public
+frontend origin. The browser calls
+`/api/v1/...` on the frontend origin. The Vercel gateway forwards those
+requests to Render using `INGRESS_SHARED_SECRET`, which must match Render's
+`ATTENDANCE_INGRESS_SHARED_SECRET`. Keep the secret server-side. The CSRF
+bootstrap returns a token and cookie. The browser echoes the token as a
+request header. Production cookies are Secure and default to SameSite=None.
 See [the deployment handover](docs/PRODUCTION_HANDOVER.md) for rollout gates.
 
 ### Cloud firewall / edge restrictions (required second layer)
@@ -441,21 +435,9 @@ section 3.
 
 ### Production safety guard
 
-With the `prod` profile active (`SPRING_PROFILES_ACTIVE=prod`), the
-application **refuses to start** unless the attendance network restriction is
-enabled and at least one approved CIDR is configured
-(`ProductionSafetyValidator`). An accidental network bypass in production is
-therefore a startup failure, not a silent misconfiguration.
-
-The `prod` profile also **refuses to start** if
-`ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=true` is set: the bypass exists only
-for developer machines and would otherwise disable the office-network
-restriction in production.
-
-The `prod` profile also **never enables the restriction implicitly**: the
-default is `false`, so an operator has to switch it on deliberately — after the
-client address has been verified. The startup error message states exactly
-that.
+The `prod` profile defaults to the office geofence and requires authenticated
+ingress. With geolocation disabled, startup requires legacy network enforcement
+and an approved CIDR. Production always refuses the local-development bypass.
 
 Beyond the network settings, the `prod` profile refuses to start unless the
 rest of the production configuration is safe as well:
@@ -630,15 +612,18 @@ only ever record or read their own attendance.
 | `GET /api/v1/attendance/me/today` | State, timestamps and which action the backend currently accepts |
 | `GET /api/v1/attendance/me/history` | Own history, newest workday first (`from`, `to`, `page`, `size`) |
 
-Both actions take `{"deviceProofId": "…"}` — the single-use, session-bound proof
-issued by `POST /api/v1/auth/webauthn/authenticate`.
+Both actions take the single-use, session-bound `deviceProofId` issued by
+`POST /api/v1/auth/webauthn/authenticate`. With geolocation enabled, both also
+require a `location` containing latitude, longitude, accuracy in metres, and
+the browser's position timestamp in epoch milliseconds.
 
 ### What a sign-in / sign-out has to satisfy
 
 Every attendance action is checked against the same chain, in this order:
 
-1. **Office network** — the request must come from an approved network, else
-   HTTP 403 (`AttendanceAccessGuard` → `AttendanceNetworkGuard`).
+1. **Office presence** — the request must use authenticated ingress and include
+   an acceptable position within the configured geofence. A rejection returns
+   HTTP 403. Environments with geolocation disabled use the legacy network policy.
 2. **Active account** — a deactivated account is refused with HTTP 403.
 3. **Approved device** — the employee must have an `APPROVED` registered device,
    and the request must carry a live device proof that belongs to that device
@@ -751,21 +736,12 @@ ADESA:
 
 ## Security notes and limitations
 
-- Attendance actions are restricted to the verified ADESA office egress CIDR by
-  a backend policy. No public IP is assumed in production configuration;
-  enforcement is a startup gate and must not be enabled for real attendance
-  until the Render path is confirmed from office Wi-Fi and a mobile hotspot. A
-  cloud firewall or edge-level restriction remains a required second layer.
-- The office-network policy is IPv4-only. IPv6 traffic is never approved and
-  cannot be used to bypass the IPv4 allowlist.
-- The resolved client address of a refused attempt is written to the restricted
-  security log only, never to the general application log or to the business
-  audit trail.
+- Production attendance requires authenticated ingress and validates the
+  reported position against the configured geofence. Browser coordinates are
+  client-reported and can be spoofed.
 - WebAuthn passkeys may be synced across devices; a passkey does not prove use
   of one specific physical device. Strict device binding requires a
   device-bound authenticator — to be evaluated with ADESA IT.
-- Office-network access does not prove physical presence (VPN routes may
-  qualify); ADESA IT defines which routes count.
 - HTTPS is mandatory in every deployed environment; no environment contains
   real employee data or production secrets in this repository.
 - Sessions are server-side and invalidation is immediate (password change,
@@ -780,7 +756,7 @@ ADESA:
   changed to the real domain before any deployment, otherwise passkeys will
   not work in a deployed browser.
 - The frontend is **not** a security boundary. Every permission, the
-  office-network restriction and the device check are enforced by the backend;
+  geofence and the device check are enforced by the backend;
   disabling a button in React is not an authorization mechanism.
 - The browser never holds credential material: no password, no token and no
   passkey material is stored. The session lives in an `HttpOnly` cookie, the

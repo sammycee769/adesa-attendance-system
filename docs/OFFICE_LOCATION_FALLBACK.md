@@ -1,64 +1,64 @@
-# IP-first attendance with location fallback
+# Office location for attendance
 
-The owner approved the office pin `6.6412393, 3.3711820` and reduced the initial
-100-metre radius to 50 metres on 2026-11-02. Both attendance sign-in and sign-out use this policy:
+Both clock-in and clock-out require a fresh browser location inside the
+owner-approved office geofence. The production defaults use the existing pin
+and 50-metre radius. The browser requests a high-accuracy reading with a
+15-second acquisition timeout and checks its timestamp, coordinates, and
+accuracy before posting attendance. The app acquires location on demand and
+keeps no copy for subsequent attempts.
 
-1. An approved public IPv4 passes immediately, without requesting location.
-2. An off-network request authenticated by the Vercel gateway receives HTTP 403
-   with `code: LOCATION_REQUIRED`, before any attendance write or proof consumption.
-3. The frontend requests one fresh, high-accuracy browser position (20-second
-   timeout, no cached fix) and automatically retries the same action and proof once.
-4. The backend accepts a fix only when it is complete, finite, no older than
-   60 seconds, no more than 5 seconds in the future, and reports accuracy within
-   50 metres. Distance from the pin plus reported accuracy must fit within the
-   50-metre radius. An uncertainty estimate never enlarges the boundary.
+The server requires authenticated ingress and validates the submitted reading.
+It checks the coordinates, timestamp, and configured maximum accuracy.
+It then uses the Haversine distance in metres and requires the distance plus
+reported accuracy to fit within the office radius. Successful attendance
+audits record `verificationMethod: GEOLOCATION`. Rejected fixes are audited
+without recording coordinates. Session, CSRF, approved passkey, single-use
+device proof, and attendance workflow checks still apply.
 
-Passkey approval, single-use session-bound proof, session validity, CSRF and
-attendance business rules remain mandatory. A missing/forged gateway key cannot
-activate the fallback. Authenticated native IPv6 can use location but cannot
-pass the IPv4 allowlist. Permission denial, timeout, invalid/outside fixes and
-the second request's errors stop the action; the app does not loop.
-
-The production profile enables this owner-approved policy by default. Other
-profiles default to IP-only. Optional Render overrides:
+## Production configuration
 
 ```dotenv
 ATTENDANCE_GEOLOCATION_ENABLED=true
+ATTENDANCE_AUTHENTICATED_INGRESS_ENABLED=true
 ATTENDANCE_OFFICE_LATITUDE=6.6412393
 ATTENDANCE_OFFICE_LONGITUDE=3.3711820
 ATTENDANCE_OFFICE_RADIUS_METRES=50
 ATTENDANCE_LOCATION_MAX_ACCURACY_METRES=50
+ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=false
+ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false
 ```
 
-Keep network enforcement and authenticated ingress enabled, matching gateway
-secrets, no trusted XFF proxies, and no development bypass. Set
-`ATTENDANCE_GEOLOCATION_ENABLED=false` to return to IP-only attendance.
+Keep the backend and Vercel ingress secrets matched and leave trusted XFF
+proxies empty. With geolocation enabled, any existing office CIDR and network-enforcement
+setting are ignored by attendance. Retain the previous deployment settings so
+the pre-release backend artifact remains a viable rollback target.
 
-The existing admin network diagnostic reports **IP eligibility only**. A false
-`withinApprovedNetwork` can now legitimately lead to location-based attendance.
+## Release and physical-device verification
 
-The app requests location only during an attendance action. It does not watch
-location continuously, persist the raw coordinates, or log them. Successful
-attendance audits record `verificationMethod: OFFICE_IP` or `GEOLOCATION`;
-failed location checks record `LOCATION_NOT_CONFIRMED` without coordinates.
-Browser coordinates and accuracy are client-reported and can be spoofed: this
-is the explicitly approved alternative to IP restriction, not cryptographic
-proof of physical presence.
+Before pushing the release commit, record the current deployment ID and
+commit on each service and verify Render's effective settings against this
+document. Disable Render auto-deploy and stage Vercel production builds without
+assigning the production domain. A push to a connected production branch can
+otherwise serve the frontend before the new endpoint exists.
 
-## Release and physical-device checks
+Deploy the release commit on Render first. Confirm health at
+`/actuator/health`, check Flyway startup logs, and verify an authenticated
+same-origin GET to `/api/v1/attendance/location-policy` returns the configured
+accuracy limit. The previous frontend can handle the new backend's
+`LOCATION_REQUIRED` response during this interval. Promote the staged Vercel
+build for the same SHA, then verify the site on its public origin. No Flyway
+migration is added by this release.
 
-Deploy the frontend first (it works with the older IP-only backend), then deploy
-the backend. Verify the production main-document response does not disable
-geolocation through Permissions-Policy.
+For a rollback of both services, restore the previous Vercel deployment
+first and confirm the production domain serves it. Then roll Render back to
+the previous successful deploy. Have test users refresh and sign in again,
+since open tabs can still run the newer frontend and a backend restart clears
+in-memory sessions.
 
-Use a dedicated test account and approved passkey. Attendance tests create real
-records. On approved office Wi-Fi, verify attendance succeeds without requesting
-location. On mobile data while inside the office, verify one browser location
-request and an automatic successful retry. Repeat for sign-out with a new proof.
-Test outside 50m, denied permission, disabled phone location and poor accuracy:
-none should create or close a record. Confirm a stale session is still rejected.
-Test different phones and positions in the building before relying on the
-geofence for all staff; even a 50m circle may include adjacent buildings and roads.
-
-Automated coverage: `GeolocationPolicyTest`, `AttendanceGeolocationTest`, the
-existing network/ingress tests, and `frontend/src/api/attendance.test.ts`.
+Use a dedicated test account with an approved passkey. On an iPhone, allow
+location for the site and enable Precise Location under Settings > Privacy &
+Security > Location Services > Safari Websites. Clock in and out while on
+site, then repeat on a subsequent workday with permission still granted.
+Repeat on mobile data. Check that turning off Precise Location shows actionable
+feedback if Safari reports low accuracy. Test denied permission and a location
+outside the office radius. Rejected attempts should leave attendance unchanged.

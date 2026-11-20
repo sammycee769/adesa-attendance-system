@@ -89,10 +89,7 @@ attendance:
   network:
     authenticated-ingress-enabled: ${ATTENDANCE_AUTHENTICATED_INGRESS_ENABLED:false}
     ingress-shared-secret: ${ATTENDANCE_INGRESS_SHARED_SECRET:}
-    # Master switch for the office-network restriction. It is NEVER enabled
-    # implicitly: the 'prod' profile refuses to start while it is off, so an
-    # operator has to switch it on deliberately after the client address has
-    # been verified (README).
+    # Legacy office-network policy for environments with geolocation disabled.
     enforcement-enabled: ${ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED:false}
     # Explicit local-development override. OFF by default: when enforcement is
     # disabled and this is not set, attendance actions FAIL CLOSED (HTTP 403).

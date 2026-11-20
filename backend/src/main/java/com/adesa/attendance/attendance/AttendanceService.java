@@ -110,7 +110,7 @@ public class AttendanceService {
     @Transactional
     public AttendanceRecordResponse signIn(HttpServletRequest request, UUID employeeId, UUID deviceProofId,
                                            com.adesa.attendance.attendance.dto.AttendanceLocation location) {
-        String verification = accessGuard.requireApprovedNetwork(employeeId, "SIGN_IN", request, location);
+        String verification = accessGuard.requireOfficePresence(employeeId, "SIGN_IN", request, location);
         requireActiveEmployee(employeeId);
         RegisteredDevice approvedDevice = deviceService.requireApprovedDevice(employeeId);
         consumeDeviceProof(employeeId, approvedDevice, deviceProofId, sessionId(request), "SIGN_IN");
@@ -158,7 +158,7 @@ public class AttendanceService {
     @Transactional
     public AttendanceRecordResponse signOut(HttpServletRequest request, UUID employeeId, UUID deviceProofId,
                                             com.adesa.attendance.attendance.dto.AttendanceLocation location) {
-        String verification = accessGuard.requireApprovedNetwork(employeeId, "SIGN_OUT", request, location);
+        String verification = accessGuard.requireOfficePresence(employeeId, "SIGN_OUT", request, location);
         requireActiveEmployee(employeeId);
         RegisteredDevice approvedDevice = deviceService.requireApprovedDevice(employeeId);
         consumeDeviceProof(employeeId, approvedDevice, deviceProofId, sessionId(request), "SIGN_OUT");

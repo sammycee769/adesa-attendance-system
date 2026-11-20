@@ -20,9 +20,7 @@ import org.springframework.core.io.ClassPathResource;
 /**
  * Unit tests for the production configuration safety guard.
  *
- * <p>Verifies that production configuration can never accidentally disable the
- * office-network restriction, start without approved CIDRs, use the development
- * database password, omit Secure cookies, or bind WebAuthn to localhost.
+ * <p>Verifies the production attendance, database, cookie and WebAuthn safeguards.
  */
 class ProductionSafetyValidatorTest {
 
@@ -74,6 +72,20 @@ class ProductionSafetyValidatorTest {
         validator().afterPropertiesSet();
         properties.getNetwork().setEnforcementEnabled(false);
         assertThatThrownBy(() -> validator().afterPropertiesSet()).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void productionGeolocationRequiresAuthenticatedIngressWithoutOfficeCidrs() {
+        prod();
+        properties.getGeolocation().setEnabled(true);
+        assertThatThrownBy(() -> validator().afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requires authenticated ingress");
+        properties.getNetwork().setAuthenticatedIngressEnabled(true);
+        properties.getNetwork().setIngressSharedSecret("a".repeat(64));
+        validator().afterPropertiesSet();
+        properties.getNetwork().setLocalDevelopmentBypass(true);
+        assertThatThrownBy(() -> validator().afterPropertiesSet()).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("local-development-bypass");
     }
 
     private void prod() {
@@ -467,8 +479,8 @@ class ProductionSafetyValidatorTest {
     }
 
     @Test
-    @DisplayName("Production requires explicit database and office-network endpoints")
-    void prodProfileRequiresExplicitDatabaseAndNetworkValues() throws IOException {
+    @DisplayName("Production requires explicit database settings and accepts optional legacy CIDRs")
+    void prodProfileRequiresExplicitDatabaseSettings() throws IOException {
         List<PropertySource<?>> sources =
                 new YamlPropertySourceLoader().load("prod", new ClassPathResource("application-prod.yml"));
         PropertySource<?> source = sources.get(0);
@@ -478,7 +490,7 @@ class ProductionSafetyValidatorTest {
         assertThat(source.getProperty("spring.datasource.hikari.data-source-properties.sslmode"))
                 .isEqualTo("require");
         assertThat(source.getProperty("attendance.network.allowed-ipv4"))
-                .isEqualTo("${ATTENDANCE_ALLOWED_IPV4}");
+                .isEqualTo("${ATTENDANCE_ALLOWED_IPV4:}");
         assertThat(source.getProperty("attendance.network.local-development-bypass"))
                 .isEqualTo("${ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS:false}");
     }

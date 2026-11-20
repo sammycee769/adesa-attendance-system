@@ -2,6 +2,7 @@ package com.adesa.attendance.attendance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -81,13 +82,22 @@ class AttendanceGeolocationTest {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT consumed_at IS NOT NULL FROM device_proofs WHERE id=?", Boolean.class, id));
     }
 
-    @Test void officeIpNeedsNoLocationAndIgnoresAnUnneededLocationFix() throws Exception {
-        action("sign-in", "198.51.100.174", SECRET, proof, fix(0)).andExpect(status().isCreated());
-        String verification = jdbc.queryForObject("SELECT details->>'verificationMethod' FROM audit_logs WHERE actor_id=? AND action='ATTENDANCE_SIGNED_IN'", String.class, employee);
-        assertThat(verification).isEqualTo("OFFICE_IP");
+    @Test void configuredOfficeIpCannotSkipLocationValidation() throws Exception {
+        action("sign-in", "198.51.100.174", SECRET, proof, null)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("LOCATION_REQUIRED"));
+        action("sign-in", "198.51.100.174", SECRET, proof, fix(0))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Your location is outside the permitted office attendance radius."));
+        assertThat(fixtures.countRecords(employee)).isZero();
+        assertThat(consumed(proof)).isFalse();
     }
 
-    @Test void challengeDoesNotWriteOrConsumeProofAndAutomaticRetryCanSignInAndOut() throws Exception {
+    @Test void policyReturnsTheConfiguredAccuracyLimit() throws Exception {
+        mvc.perform(get("/api/v1/attendance/location-policy").session(session))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.maxAccuracyMetres").value(50.0));
+    }
+
+    @Test void missingLocationDoesNotWriteOrConsumeProofAndFreshLocationAllowsBothActions() throws Exception {
         action("sign-in", "203.0.113.22", SECRET, proof, null)
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("LOCATION_REQUIRED"));
         assertThat(fixtures.countRecords(employee)).isZero();
@@ -104,8 +114,11 @@ class AttendanceGeolocationTest {
         assertThat(fixtures.countRecords(employee)).isEqualTo(1);
     }
 
-    @Test void outsideLocationIsDeniedWithoutBurningTheProof() throws Exception {
-        action("sign-in", "203.0.113.22", SECRET, proof, fix(6.65)).andExpect(status().isForbidden());
+    @Test void inaccurateLocationIsDeniedWithoutBurningTheProof() throws Exception {
+        var inaccurate = new java.util.HashMap<>(fix(6.6412393));
+        inaccurate.put("accuracyMetres", 200);
+        action("sign-in", "203.0.113.22", SECRET, proof, inaccurate).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("too imprecise")));
         assertThat(fixtures.countRecords(employee)).isZero();
         assertThat(consumed(proof)).isFalse();
     }
@@ -137,7 +150,7 @@ class AttendanceGeolocationTest {
         assertThat(fixtures.countRecords(employee)).isZero();
     }
 
-    @Test void authenticatedIpv6CanUseLocationButNeverTheIpv4FastPath() throws Exception {
+    @Test void authenticatedIpv6UsesTheSameLocationPolicy() throws Exception {
         action("sign-in", "2001:db8::1", SECRET, proof, null)
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("LOCATION_REQUIRED"));
         action("sign-in", "2001:db8::1", SECRET, proof, fix(6.6412393)).andExpect(status().isCreated());

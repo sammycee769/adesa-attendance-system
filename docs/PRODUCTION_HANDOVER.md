@@ -38,26 +38,24 @@ Runtime: Docker; the image runs Java 21 as appuser and binds Render's PORT.
 Health check: /actuator/health (includes database health; details hidden).
 Use one instance initially: sessions, rate limits and challenges are in memory.
 Restarts sign sessions out; attendance records remain in PostgreSQL.
-The owner confirmed auto-deploy is enabled and authorized pushing deployment
-changes; a push can trigger production migrations. No Docker command override is needed.
+A push to the linked branch can trigger production deployment. Confirm the
+current auto-deploy setting before pushing. No Docker command override is needed.
 
 Known non-secret values:
 
 ```dotenv
 SPRING_PROFILES_ACTIVE=prod
 ATTENDANCE_TIMEZONE=Africa/Lagos
-ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=true
+ATTENDANCE_GEOLOCATION_ENABLED=true
+ATTENDANCE_AUTHENTICATED_INGRESS_ENABLED=true
+ATTENDANCE_NETWORK_ENFORCEMENT_ENABLED=false
 ATTENDANCE_NETWORK_LOCAL_DEVELOPMENT_BYPASS=false
 ATTENDANCE_CLIENT_IP_HEADER=X-Forwarded-For
 WEBAUTHN_USER_VERIFICATION_REQUIRED=true
 MAIL_PROVIDER=zoho-api
 ```
 
-Owner-approved office egress (2026-10-23; repeat live office/hotspot verification):
-
-```dotenv
-ATTENDANCE_ALLOWED_IPV4=105.127.8.52/32
-```
+See [Office location for attendance](OFFICE_LOCATION_FALLBACK.md) for the configured radius and device verification steps.
 
 Values the owner must obtain (not guesses):
 
@@ -69,7 +67,7 @@ Values the owner must obtain (not guesses):
 | APP_PUBLIC_URL | Exact HTTPS frontend origin, no path/query; also the sole allowed credentialed CORS origin |
 | WEBAUTHN_RP_ID | Frontend hostname only, no scheme/path; choose final domain before registering passkeys |
 | WEBAUTHN_ALLOWED_ORIGINS | Exact HTTPS frontend origin(s) valid for that RP ID; no wildcard or preview domains |
-| ATTENDANCE_TRUSTED_PROXY_ADDRESSES | Verified stable proxy IPv4 hosts only (/32); leave empty until justified |
+| ATTENDANCE_INGRESS_SHARED_SECRET | Private 64-character hex key matching the Vercel gateway |
 | ZOHO_DATA_CENTER | Mailbox region: US, EU, IN, AU, JP, CA, CN, AE or SA |
 | ZOHO_MAIL_ACCOUNT_ID | Account ID from authenticated Zoho Mail accounts API |
 | ZOHO_CLIENT_ID | Self Client OAuth ID, entered privately |
@@ -107,63 +105,27 @@ must never be loaded into the production database.
 
 Leave all ADESA_BOOTSTRAP_ADMIN_* values absent during initial readiness checks.
 
-## Office-network trust gate
+## Attendance ingress
 
-With no trusted proxies configured, forwarding headers are ignored. Attendance
-will generally be denied behind a hosting proxy; that is the safe initial state.
-The resolver walks the full X-Forwarded-For chain right-to-left and selects the
-first untrusted hop. It rejects malformed hops, including trailing empty hops,
-and combines repeated header lines. It must never select the first header entry
-just because it resembles the office address.
-
-Obtain Render's documented/support-confirmed peer identities and header append
-or overwrite behavior. A sampled address or observed browser public IP alone is
-not sufficient proof of stable proxy trust. Current production validation accepts
-only individual IPv4 proxy hosts, not dynamic ranges. Do not broaden that rule or
-trust all private addresses to fit a platform whose peers cannot be pinned.
-
-Before creating the admin, use provider-confirmed topology and a controlled,
-non-production diagnostic deployment with no real users/data to inspect the peer
-and full chain. Keep production attendance closed until that evidence is ready.
-After explicitly approved first-admin provisioning, use the existing authenticated
-GET /api/v1/admin/network/client-address from office and hotspot to corroborate it.
-The endpoint remains ADMIN-only; no public diagnostic endpoint is added.
-
-Required live evidence (with an approved test identity/device, separately approved
-before writing attendance): office allowed; hotspot denied; hotspot denied with
-spoofed X-Forwarded-For=105.127.6.174; repeated/spoofed header lines denied; behavior
-persists after restart and routing changes. Test the direct Render URL as well as
-any custom domain so an alternate ingress cannot bypass edge restrictions.
-
-If Render cannot provide a stable, trustworthy path compatible with this policy,
-stop rollout. Secure alternatives are an operator-controlled gateway reached
-through an authenticated private/tunnel connection (with public origin access
-blocked), or backend hosting with pinned ingress proxies and enforced origin
-access. Do not merely insert a Vercel rewrite or read CF-Connecting-IP without
-proving sender authentication, header sanitization and protection of every origin.
+Production clocks in and out through the authenticated Vercel gateway. Keep
+the ingress secrets matched and the trusted XFF proxy list empty. Use the
+[office location verification steps](OFFICE_LOCATION_FALLBACK.md) for release
+acceptance. Include a direct Render request in the access checks to verify that
+attendance remains restricted to authenticated ingress.
 
 ## Vercel (owner applies after approval)
 
-Import the repository, choose frontend as Root Directory, Vite framework,
-build command npm run build, output dist, and supported Node 22 or 24. Set only
-VITE_API_BASE_URL to the actual backend HTTPS origin, without /api/v1. It is
-embedded at build time, so changing it requires a frontend rebuild.
-frontend/vercel.json provides history fallback; verify reload on /device and
-password setup/recovery routes, not just the homepage. Vercel preview domains
-are not automatically trusted by the backend.
+Use the existing Vite project with Root Directory `frontend`, build command
+`npm run build`, output directory `dist`, and Node 24. Use
+`VITE_API_BASE_URL=https://adesa-attendance-frontend.vercel.app` or leave it
+empty in Production. Browser requests reach the
+same-origin `/api/v1/...` gateway in `frontend/vercel.json`. It forwards
+to `https://adesa-attendance-system.onrender.com`. Vercel's server-only
+`INGRESS_SHARED_SECRET` must match Render's `ATTENDANCE_INGRESS_SHARED_SECRET`.
 
-The backend now permits credentialed CORS only for APP_PUBLIC_URL and the CSRF
-header. CSRF remains enforced for mutations. The bootstrap returns a no-store
-JSON token plus a backend-origin cookie; the frontend retains the token in memory
-and echoes X-XSRF-TOKEN, with credentials: include. Sessions remain Secure and
-HttpOnly, and the CSRF cookie is Secure in prod. No wildcard CORS is used.
-
-Separate vercel.app/onrender.com sites require SameSite=None but browsers may
-still block third-party cookies. Prefer frontend and API HTTPS subdomains of one
-ADESA-owned domain, with SESSION_COOKIE_SAME_SITE=lax. This keeps requests direct
-to Render without adding another IP-forwarding proxy. Confirm cookies, login,
-logout, forced password change, WebAuthn and recovery in the supported browsers.
-Do not change the passkey RP ID after onboarding without a migration plan.
+Test the production hostname so WebAuthn uses its registered RP ID and origin.
+Check session cookies, CSRF, and history fallback on reloads. Use the release
+order in [Office location for attendance](OFFICE_LOCATION_FALLBACK.md).
 
 ## Backend readiness (owner authorizes deployment first)
 
@@ -219,7 +181,7 @@ live checks has been performed by this handover:
 - Employee setup email, password selection, device registration and admin approval.
 - Lagos workday: one sign-in, no second sign-in, no sign-out before sign-in, one
   sign-out, rejection of another sign-out. Use authorized acceptance identities.
-- Office allowed; hotspot and spoofed-header attempts denied with a valid device.
+- On-site clock-in and clock-out succeed with persistent Safari permission. Out-of-radius attempts and direct backend requests without authenticated ingress are denied.
 - Other employees' records and admin endpoints inaccessible to an employee.
 - Recovery email/token expiry/single use, credential invalidation and no secret logs.
 - Approved restart preserves attendance, signs out sessions, never repeats bootstrap.
@@ -235,7 +197,7 @@ npm --prefix frontend run build
 
 A green local suite does not verify Supabase, Zoho or office/hotspot behavior.
 
-## Gateway rollout and approved office-IP update — 2026-10-23
+## Historical gateway rollout and office-IP update — 2026-10-23
 
 The authenticated Vercel gateway is deployed. API requests now use the frontend
 hostname. The owner explicitly approved replacing the original provisional
