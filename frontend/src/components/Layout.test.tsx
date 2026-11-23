@@ -4,9 +4,10 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Layout } from './Layout';
 
-const auth = vi.hoisted(() => ({ role: 'ADMIN', signOut: vi.fn() }));
+const auth = vi.hoisted(() => ({ role: 'ADMIN', signOut: vi.fn(), access: vi.fn() }));
+vi.mock('../api/client', () => ({ apiRequest: auth.access }));
 vi.mock('../auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { role: auth.role, fullName: 'Admin With A Long Display Name', employeeNumber: 'ADMIN-001' }, signOut: auth.signOut }),
+  useAuth: () => ({ user: { id: 'fixture', role: auth.role, fullName: 'Admin With A Long Display Name', employeeNumber: 'ADMIN-001' }, signOut: auth.signOut }),
 }));
 
 function CurrentPage() { return <p data-testid="current-page">{useLocation().pathname}</p>; }
@@ -15,7 +16,7 @@ function showLayout() {
 }
 
 describe('responsive application navigation', () => {
-  beforeEach(() => { auth.role = 'ADMIN'; auth.signOut.mockReset(); });
+  beforeEach(() => { auth.role = 'ADMIN'; auth.signOut.mockReset(); auth.access.mockReset().mockResolvedValue({ allowed: false }); });
 
   it('opens the menu and closes it with Escape, returning focus to the toggle', async () => {
     const user = userEvent.setup();
@@ -41,7 +42,16 @@ describe('responsive application navigation', () => {
     showLayout();
     expect(screen.queryByRole('link', { name: 'Employees' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Devices' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Media Boards' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Recurring Payments' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Device' })).toBeInTheDocument();
+  });
+
+  it('shows Media Boards for an authorized employee without granting admin navigation', async () => {
+    auth.role = 'EMPLOYEE';
+    auth.access.mockResolvedValue({ allowed: true, category: 'OPERATOR' });
+    showLayout();
+    expect(await screen.findByRole('link', { name: 'Media Boards' })).toHaveAttribute('href', '/media/boards');
+    expect(screen.queryByRole('link', { name: 'Employees' })).not.toBeInTheDocument();
   });
 });

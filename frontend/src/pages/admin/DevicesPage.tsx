@@ -1,3 +1,4 @@
+import { useRevealEditor } from '../../utils/useRevealEditor';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -38,6 +39,7 @@ export function DevicesPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [terminate, setTerminate] = useState<{ device: AdminDevice; action: TerminateAction } | null>(null);
+  const deviceEditor = useRevealEditor<HTMLElement>(terminate && `${terminate.action}:${terminate.device.id}`);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<{ message: string; hint: string | null } | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -238,7 +240,7 @@ export function DevicesPage() {
       </section>
 
       {terminate ? (
-        <section className="card" aria-labelledby="terminate-heading">
+        <section ref={deviceEditor} className="card reveal-editor" aria-labelledby="terminate-heading">
           <h2 id="terminate-heading">
             {terminate.action === 'revoke' ? 'Revoke the device' : 'Replace the device'} of{' '}
             {terminate.device.employeeName}
@@ -257,7 +259,6 @@ export function DevicesPage() {
                 name="terminate-reason"
                 type="text"
                 maxLength={255}
-                autoFocus
                 required
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}

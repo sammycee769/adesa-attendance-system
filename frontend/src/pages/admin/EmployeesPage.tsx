@@ -1,3 +1,4 @@
+import { useRevealEditor } from '../../utils/useRevealEditor';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -42,6 +43,7 @@ export function EmployeesPage() {
   const [active, setActive] = useState<'' | 'true' | 'false'>('');
 
   const [showForm, setShowForm] = useState(false);
+  const employeeEditor = useRevealEditor<HTMLFormElement>(showForm);
   const [form, setForm] = useState({
     employeeNumber: '',
     fullName: '',
@@ -307,7 +309,7 @@ export function EmployeesPage() {
         </div>
 
         {showForm && canManage ? (
-          <form onSubmit={handleCreate} noValidate>
+          <form ref={employeeEditor} className="reveal-editor" onSubmit={handleCreate} noValidate>
             <div className="filter-grid">
               <div className="form-field">
                 <label htmlFor="new-number">Employee number</label>
@@ -316,7 +318,6 @@ export function EmployeesPage() {
                   name="new-number"
                   type="text"
                   maxLength={32}
-                  autoFocus
                   autoComplete="off"
                   autoCapitalize="characters"
                   autoCorrect="off"

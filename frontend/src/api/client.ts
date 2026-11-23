@@ -211,8 +211,9 @@ async function readErrorBody(response: Response): Promise<ApiErrorBody | null> {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? 'GET';
   const headers: Record<string, string> = { Accept: 'application/json' };
+  const form = options.body instanceof FormData ? options.body : undefined;
 
-  if (options.body !== undefined) {
+  if (!form && options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
   if (method !== 'GET') {
@@ -231,7 +232,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         method,
         headers,
         credentials: 'include',
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: form ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
         signal: deadline.signal,
       });
     } catch (cause) {
@@ -265,7 +266,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export interface DownloadOptions {
-  contentType?: 'application/pdf' | 'text/csv';
+  contentType?: 'application/pdf' | 'text/csv' | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   params?: Record<string, QueryValue>;
   signal?: AbortSignal;
   /** Deadline for the whole call. Defaults to {@link DEFAULT_TIMEOUT_MS}. */

@@ -1,7 +1,8 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { useAuth } from '../auth/AuthProvider';
+import { apiRequest } from '../api/client';
 import navLogo from '../assets/navbar-logo.jpeg';
 
 /**
@@ -13,6 +14,21 @@ export function Layout({ children }: { children: ReactNode }) {
   const [signingOut, setSigningOut] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
+
+  const [mediaAccessFor, setMediaAccessFor] = useState<string | null>(null);
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId || user?.mustChangePassword) return;
+    const controller = new AbortController();
+    void apiRequest<{ allowed: boolean }>('/api/v1/media/access', { signal: controller.signal })
+      .then(access => {
+        if (!controller.signal.aborted) setMediaAccessFor(access.allowed ? userId : null);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setMediaAccessFor(null);
+      });
+    return () => controller.abort();
+  }, [userId, user?.mustChangePassword]);
 
   const handleLogout = async () => {
     setSigningOut(true);
@@ -55,6 +71,8 @@ export function Layout({ children }: { children: ReactNode }) {
               </NavLink>
               <NavLink to="/device">Device</NavLink>
               <NavLink to="/recurring-payments">Recurring Payments</NavLink>
+              {userId && !user?.mustChangePassword && mediaAccessFor === userId
+                ? <NavLink to="/media/boards">Media Boards</NavLink> : null}
               <NavLink to="/assets">IT Asset Management</NavLink>
               {user && (user.role === 'ADMIN' || user.role === 'HR') ? (
                 <>

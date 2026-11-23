@@ -762,3 +762,146 @@ ADESA:
   passkey material is stored. The session lives in an `HttpOnly` cookie, the
   CSRF token in the deliberately readable `XSRF-TOKEN` cookie, and every
   state-changing request echoes it in the `X-XSRF-TOKEN` header.
+
+## ADESA Media Board Contracts
+
+The Media Boards workspace is part of the existing Spring session and React
+navigation. It contains the operational dashboard, register, vendor and client
+contract periods, renewals, obligations, payment ledger, reminder schedule,
+reports, audit view, and the existing workbook import. Keep the original workbook
+and its column names as the source of record during review.
+
+### Workflows
+
+- In **Workbook imports**, choose the existing .xlsx. The app stages it and
+  opens guided setup for the first board. Known information is filled in.
+  Resolve conflicting expiry dates and confirm the two contract periods.
+  Choose whether to record an obligation on each side. An obligation requires
+  a verified amount, payment reference, and due date. Confirmation creates or
+  links the board, confirms the agreements and adds any verified obligations
+  in one transaction. The Reminders view then calculates the applicable dates.
+  Choose **Finish later** to leave the other rows staged.
+  Excel types, formats, cached values and formulas remain in the source snapshot.
+  The original bytes are retained and formulas are never evaluated.
+- Open **Edit and approve dates** on a board candidate, compare the vendor expiry
+  columns, enter the confirmed date, and check the approval box. The client
+  expiry is approved separately. After review, link the row to an existing
+  board or create a board and two independent contract drafts. Linking to a
+  board keeps the original workbook available for review and never overwrites
+  that board. Confirm start, expiry, party and rate separately on each draft.
+- Create renewals as new contract periods. Confirmed periods stay in history.
+  Contracted profitability compares only confirmed vendor and client periods
+  with exactly matching coverage. The reports show recorded cash separately.
+- Record obligations and partial payments in **Payments**. Provide the SLA
+  document URL when recording or correcting a payment. Corrections also
+  require a reason. A correction records a reversal and a replacement in one
+  transaction. Reversal entries remain visible and outstanding balances are
+  computed from the ledger. An imported status note cannot create a payment.
+- Archive through the record actions and acknowledge dependent history if
+  present. Permanent deletion is limited to archived records without financial,
+  renewal or import history. The ledger, protected financial records, source
+  workbooks and audit entries follow retention safeguards.
+- **Reports** provides previews and PDF and Excel downloads. Use board, vendor,
+  client, status and date filters. Reports are generated on demand and do not
+  create separate stored export records.
+
+### Local configuration and release preflight
+
+Flyway V12 to V18 add the private schema, source and review snapshots, register
+and ledger, reminder outbox, and payment SLA links. Apply them to a disposable PostgreSQL instance
+first. Keep `media_private` outside Supabase’s exposed API schemas. The Flyway
+principal needs schema creation rights. Never grant the application login
+ownership of the schema or direct access to its relations.
+
+Create a dedicated login with no role memberships, table grants, ownership,
+`CREATEROLE`, `BYPASSRLS`, or superuser rights. Provision its secret privately.
+The login name below is an example.
+
+```sql
+GRANT USAGE ON SCHEMA media_private TO adesa_media_runtime;
+GRANT EXECUTE ON FUNCTION
+    media_private.category(uuid),
+    media_private.stage_workbook(uuid, text, text, bytea, jsonb),
+    media_private.workbook_history(uuid),
+    media_private.workbook_preview(uuid, uuid),
+    media_private.board_reviews(uuid, uuid),
+    media_private.save_board_review(uuid, uuid, int, int, jsonb),
+    media_private.register(uuid),
+    media_private.mutate(uuid, text, text, jsonb),
+    media_private.link_review(uuid, jsonb),
+    media_private.import_links(uuid, uuid),
+    media_private.reminder_history(uuid),
+    media_private.reminder_plan(uuid),
+    media_private.complete_import_board(uuid, uuid, int, jsonb)
+TO adesa_media_runtime;
+```
+
+Set `ADESA_MEDIA_DB_URL`, `ADESA_MEDIA_DB_USERNAME`, and
+`ADESA_MEDIA_DB_PASSWORD` on the Spring service to enable the module. Use
+the same database as Flyway, a PostgreSQL JDBC URL with TLS for hosted
+instances, and separate credentials from the main datasource. Set connection
+timeouts and monitor the cost of full-register reads before expanding beyond
+the intended internal workload. List pagination runs in the browser.
+
+Provision `media_private.memberships` privately using verified, active
+`employees.id` values. Assign Paschal `BUSINESS_MANAGER`, the COO `COO`, and
+Ifeoluwa `OPERATOR`. Active System Admins are recognized through the existing
+role. Ordinary HR and employee accounts have no module access.
+
+| Action | System Admin | Business Manager | COO | Operator |
+| --- | --- | --- | --- | --- |
+| Register, review, import, payments, reports | Allowed | Allowed | Allowed | Allowed |
+| Archive eligible records | Allowed | Allowed | Allowed | Denied |
+| Restore or permanently delete eligible records | Allowed | Denied | Denied | Denied |
+| View Media audit | Allowed | Denied | Allowed | Denied |
+
+Spring derives the actor from the session. Database functions independently
+enforce active membership and lifecycle privileges. The restricted database
+login has no direct table access. It is part of the trusted server boundary,
+since a credential holder could submit a different actor to those functions.
+Keep that credential server-side. Infrastructure owners can alter database
+objects and remain outside the append-only audit guarantee.
+
+### Reminders
+
+Map and verify all three internal employee email addresses before enabling the
+worker. Insert those verified addresses in `media_private.reminder_recipients`
+against the corresponding membership records. Delivery is gated on all three
+active emails matching the verified values. External vendor and client records
+supply reminder context only. The worker uses Africa/Lagos dates and exact
+reminder stages. Superseded contracts and settled items lose eligibility.
+Unprocessed stages from prior dates are cancelled. An uncertain provider
+outcome is kept in history for review before any manual resend.
+
+Use another restricted login granted only the worker functions below. Leave
+the worker disabled in production until the COO approves delivery and the
+verified recipient list. Use a stub or local capture transport for testing.
+
+```sql
+GRANT USAGE ON SCHEMA media_private TO adesa_media_worker;
+GRANT EXECUTE ON FUNCTION media_private.prepare_reminders(date),
+    media_private.claim_reminder(date), media_private.finish_reminder(uuid, uuid, text)
+TO adesa_media_worker;
+```
+
+Set `ADESA_MEDIA_WORKER_DB_USERNAME` and `ADESA_MEDIA_WORKER_DB_PASSWORD`.
+Start in local capture mode with `ADESA_MEDIA_REMINDERS_ENABLED=true` and
+`ADESA_MEDIA_ALLOW_LIVE_MAIL=false`. Live transport requires separate
+approval and an explicit live flag. Do not store recipient credentials or
+the supplied workbook in Git.
+
+### Workbook rules and verification
+
+The authoritative import is the existing .xlsx. The adapter reads the OOH
+header on row 1 and operations tracker headers on row 2. Spend tracker rows
+are preserved without creating contracts or transactions. Imports of identical
+bytes reuse the same batch by SHA-256. Updated workbooks produce new review
+batches and can link to confirmed board identities without overwriting existing
+registry records. Displayed insert, update and skip counts are batch counts.
+Upload limits are 512 KB compressed, 12 MB expanded, and 50,000 physical cells.
+
+Run `mvn -B verify` in `backend` with a disposable Docker PostgreSQL instance.
+Use the system property `adesa.media.workbook-fixture` with the private workbook
+path to include the real-input check. Run `npm test`, `npm run test:gateway`,
+and `npm run build` in `frontend`. Include the permission, reminder, import,
+financial reconciliation and report results in COO review before release.

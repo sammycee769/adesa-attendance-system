@@ -1,3 +1,4 @@
+import { useRevealEditor } from '../../utils/useRevealEditor';
 import { useEffect, useState } from 'react';
 import { paymentApi, type PaymentConfig, type PaymentDashboard, type PaymentMessage, type PaymentRecord } from '../../api/payments';
 import { useAuth } from '../../auth/AuthProvider';
@@ -12,6 +13,7 @@ export function RecurringPaymentsPage() {
  const [month,setMonth]=useState(()=>{const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit'}).formatToParts(new Date());return `${parts.find(p=>p.type==='year')?.value}-${parts.find(p=>p.type==='month')?.value}`;});
  const [signature,setSignature]=useState('');const [enabled,setEnabled]=useState(false);
  const [recovery,setRecovery]=useState<PaymentRecord|null>(null);const [reason,setReason]=useState('');
+ const recoveryEditor=useRevealEditor<HTMLFormElement>(recovery?.id);
  const [accepted,setAccepted]=useState(false);const [providerId,setProviderId]=useState('');
  useEffect(()=>{const abort=new AbortController();paymentApi.dashboard(abort.signal).then(result=>{
   setData(result);setEnabled(result.settings.enabled);setSignature(result.settings.signature_html);
@@ -67,7 +69,7 @@ export function RecurringPaymentsPage() {
      {canManage&&['PREVIEW','MISSED','FAILED','RETRY','UNKNOWN'].includes(r.status)?<button className="button button-secondary" disabled={busy} onClick={()=>{setRecovery(r);setReason('');setProviderId('');setAccepted(false);}}>{r.status==='UNKNOWN'?'Reconcile':'Recover / retry'}</button>:null}
     </td></tr>)}</tbody></table></div>{!data.history.length?<p>No payment requests recorded.</p>:null}
    </section>
-   {canManage&&recovery?<form className="card" onSubmit={e=>{e.preventDefault();void action(async()=>{if(recovery.status==='UNKNOWN')await paymentApi.reconcile(recovery.id,accepted,providerId,reason);else await paymentApi.recover(recovery.id,reason);setRecovery(null);},'Recovery action recorded.');}}>
+   {canManage&&recovery?<form ref={recoveryEditor} className="card reveal-editor" onSubmit={e=>{e.preventDefault();void action(async()=>{if(recovery.status==='UNKNOWN')await paymentApi.reconcile(recovery.id,accepted,providerId,reason);else await paymentApi.recover(recovery.id,reason);setRecovery(null);},'Recovery action recorded.');}}>
     <h2>{recovery.status==='UNKNOWN'?'Reconcile uncertain delivery':'Queue confirmed unsent request'}: {recovery.name}</h2>
     {recovery.status==='UNKNOWN'?<><label className="payment-checkbox"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/>Zoho confirms this message was accepted</label>
      {!accepted?<p>Confirm with Zoho that this message was never accepted before marking it failed. Recovery is a separate action.</p>:null}

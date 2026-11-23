@@ -1,3 +1,4 @@
+import { useRevealEditor } from '../../utils/useRevealEditor';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -59,6 +60,7 @@ export function AttendancePage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<AdminAttendanceRecord | null>(null);
+  const correctionEditor = useRevealEditor<HTMLElement>(editing?.id);
   const [signIn, setSignIn] = useState('');
   const [signOut, setSignOut] = useState('');
   const [reason, setReason] = useState('');
@@ -451,7 +453,7 @@ export function AttendancePage() {
       )}
 
       {editing ? (
-        <section className="card" aria-labelledby="correction-heading">
+        <section ref={correctionEditor} className="card reveal-editor" aria-labelledby="correction-heading">
           <h2 id="correction-heading">Correct the record of {editing.employeeName}</h2>
           <p className="hint">
             The times are in the attendance timezone ({ATTENDANCE_TIMEZONE}). The previous values are kept in
@@ -466,7 +468,6 @@ export function AttendancePage() {
                   id="correction-sign-in"
                   name="correction-sign-in"
                   type="datetime-local"
-                  autoFocus
                   required
                   value={signIn}
                   onChange={(event) => setSignIn(event.target.value)}

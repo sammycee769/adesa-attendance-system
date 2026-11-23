@@ -1,9 +1,11 @@
+import { useRevealEditor } from '../../utils/useRevealEditor';
 import { useState } from 'react';
 import type { PaymentConfig } from '../../api/payments';
 export function PaymentEditor({payment, busy, onSave, onCancel, employees=[]}:{payment:PaymentConfig;busy:boolean;onSave:(draft:PaymentConfig)=>void;onCancel:()=>void;employees?:{id:string;full_name:string;email:string}[]}) {
+ const editor=useRevealEditor<HTMLFormElement>(payment.id);
  const [draft,setDraft]=useState(payment);
  const update=<K extends keyof PaymentConfig>(key:K,value:PaymentConfig[K])=>setDraft(d=>({...d,[key]:value}));
- return <form className="payment-editor" onSubmit={event=>{event.preventDefault();onSave(draft);}}>
+ return <form ref={editor} className="payment-editor reveal-editor" onSubmit={event=>{event.preventDefault();onSave(draft);}}>
   <h3>Edit {payment.name}</h3>
   <label>Assigned employee<select value={draft.owner_employee_id??''} onChange={e=>update('owner_employee_id',e.target.value||null)}><option value="">Unassigned — automatic sending blocked</option>{employees.map(e=><option key={e.id} value={e.id}>{e.full_name} ({e.email})</option>)}</select></label>
   <div className="payment-fields">

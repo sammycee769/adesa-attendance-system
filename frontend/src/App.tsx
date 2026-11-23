@@ -1,3 +1,4 @@
+import { MediaWorkspace } from './pages/media/MediaWorkspace';
 import { RecurringPaymentsPage } from './pages/payments/RecurringPaymentsPage';
 import { AssetManagementPage } from './pages/assets/AssetPage';
 import { Outlet, Route, Routes } from 'react-router-dom';
@@ -42,6 +43,7 @@ export function App() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/media/boards" element={<MediaWorkspace />} />
         <Route path="/assets" element={<AssetManagementPage />} />
         <Route path="/assets/:section" element={<AssetManagementPage />} />
         <Route path="/recurring-payments" element={<RecurringPaymentsPage />} />
