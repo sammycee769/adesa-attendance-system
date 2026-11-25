@@ -1,457 +1,169 @@
-import { useRevealEditor } from '../../utils/useRevealEditor';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-import {
-  correctAttendance,
-  exportAttendancePdf,
-  fetchAttendance,
-  fetchAttendanceOverview,
-} from '../../api/admin';
+import { correctAttendance, exportAttendanceCsv, exportAttendancePdf, fetchDailyAttendance } from '../../api/admin';
 import { ApiError } from '../../api/client';
-import type { AdminAttendanceRecord, AttendanceOverviewEntry } from '../../api/types';
+import type { DailyAttendanceReport, DailyAttendanceRow, DailyAttendanceStatus } from '../../api/types';
 import { ErrorBanner, SuccessBanner } from '../../components/Banners';
-import { AttendanceStateBadge } from '../../components/StatusBadge';
 import { describeError } from '../../utils/errors';
-import {
-  ATTENDANCE_TIMEZONE,
-  attendanceLocalToInstant,
-  formatTime,
-  formatWorkday,
-  instantToAttendanceLocal,
-  todayWorkday,
-} from '../../utils/format';
+import { ATTENDANCE_TIMEZONE, attendanceLocalToInstant, instantToAttendanceLocal } from '../../utils/format';
+import { useRevealEditor } from '../../utils/useRevealEditor';
+import { AttendanceDayCard, attendanceLabels } from './AttendanceDayCard';
 
-/**
- * The attendance report.
- *
- * Two views on the same data:
- *
- * - the daily overview: every active employee and their state for one workday,
- * - the record list: filterable, exportable as PDF, and correctable.
- *
- * A correction always needs a reason. It is written to the correction history
- * and to the audit log by the backend; the frontend only sends it.
- */
-
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 7;
+const EMPTY_FILTERS = { from: '', to: '', date: '', search: '', subsidiary: '', department: '', status: '' as '' | DailyAttendanceStatus };
+const filterLabels = { from: 'Start date', to: 'End date', date: 'Specific working day',
+  search: 'Employee name', subsidiary: 'Subsidiary', department: 'Department' } as const;
 
 export function AttendancePage() {
   const navigate = useNavigate();
-
-  const [view, setView] = useState<'overview' | 'records'>('overview');
-  const [date, setDate] = useState(todayWorkday());
-
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [status, setStatus] = useState<'' | 'SIGNED_IN' | 'SIGNED_OUT'>('');
+  const [draft, setDraft] = useState(EMPTY_FILTERS);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
-
-  const [overview, setOverview] = useState<AttendanceOverviewEntry[]>([]);
-  const [records, setRecords] = useState<AdminAttendanceRecord[]>([]);
-  const [totalElements, setTotalElements] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-
+  const [report, setReport] = useState<DailyAttendanceReport | null>(null);
+  const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; hint: string | null } | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  const [editing, setEditing] = useState<AdminAttendanceRecord | null>(null);
-  const correctionEditor = useRevealEditor<HTMLElement>(editing?.id);
+  const [editing, setEditing] = useState<DailyAttendanceRow | null>(null);
+  const correctionEditor = useRevealEditor<HTMLElement>(editing?.recordId);
+  const correctionTrigger = useRef<HTMLButtonElement | null>(null);
   const [signIn, setSignIn] = useState('');
   const [signOut, setSignOut] = useState('');
   const [reason, setReason] = useState('');
-  /** Returns keyboard focus to the row button when the correction form closes. */
-  const correctionTrigger = useRef<HTMLButtonElement | null>(null);
-
-  const handleError = useCallback(
-    (cause: unknown, fallback: string) => {
-      if (cause instanceof ApiError && cause.isUnauthorized) {
-        navigate('/login', { replace: true });
-        return;
-      }
-      setError(describeError(cause, fallback));
-    },
-    [navigate],
-  );
-
-  const loadOverview = useCallback(async (workday: string) => {
-    const result = await fetchAttendanceOverview(workday);
-    setOverview(result);
-  }, []);
-
-  const loadRecords = useCallback(
-    async (currentPage: number, filters: { search: string; from: string; to: string; status: string }) => {
-      const result = await fetchAttendance({
-        search: filters.search || undefined,
-        from: filters.from || undefined,
-        to: filters.to || undefined,
-        status: filters.status === '' ? undefined : (filters.status as 'SIGNED_IN' | 'SIGNED_OUT'),
-        page: currentPage,
-        size: PAGE_SIZE,
-      });
-      setRecords(result.records);
-      setTotalElements(result.totalElements);
-      setTotalPages(result.totalPages);
-    },
-    [],
-  );
-
-  // Debounce the free-text filter so typing does not issue one request per
-  // keystroke against the report endpoint.
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     setLoading(true);
-    (async () => {
-      try {
-        if (view === 'overview') {
-          await loadOverview(date);
-        } else {
-          await loadRecords(page, { search, from, to, status });
+    setError(null);
+    fetchDailyAttendance({ ...filters, status: filters.status || undefined, page, size: PAGE_SIZE },controller.signal)
+      .then(result => {
+        if (!controller.signal.aborted) {
+          setReport(result);
+          if (page > 0 && result.days.length === 0) setPage(page - 1);
         }
-        if (active) {
-          setError(null);
-        }
-      } catch (cause) {
-        if (active) {
-          handleError(cause, 'The attendance information could not be loaded.');
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-    // The filters are read on every change; they are part of the dependency list.
-  }, [view, date, page, search, from, to, status, loadOverview, loadRecords, handleError]);
+      })
+      .catch(cause => {
+        if (controller.signal.aborted) return;
+        setReport(null);
+        if (cause instanceof ApiError && cause.isUnauthorized) navigate('/login', { replace: true });
+        else setError(describeError(cause,'Attendance records could not be loaded.'));
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [filters, page, revision, navigate]);
 
-  const handleExport = async () => {
-    if (busy) {
-      return;
-    }
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setEditing(null);
+    setSuccess(null);
+    setPage(0);
+    setFilters({ ...draft });
+  }
+
+  async function exportReport(format: 'pdf' | 'csv') {
+    if (busy || !report) return;
     setBusy(true);
     setError(null);
     setSuccess(null);
     try {
-      const blob = await exportAttendancePdf({
-        search: search || undefined,
-        from: from || undefined,
-        to: to || undefined,
-        status: status === '' ? undefined : (status as 'SIGNED_IN' | 'SIGNED_OUT'),
-      });
-      downloadBlob(blob, `adesa-attendance-${from || 'all'}-to-${to || 'all'}.pdf`);
+      const query = { ...filters, from: report.from, to: report.to, status: filters.status || undefined };
+      const blob = await (format === 'pdf' ? exportAttendancePdf(query) : exportAttendanceCsv(query));
+      downloadBlob(blob, `adesa-attendance-${report.from}-to-${report.to}.${format}`);
       setSuccess('The report was downloaded.');
     } catch (cause) {
-      handleError(cause, 'The report could not be exported.');
+      if (cause instanceof ApiError && cause.isUnauthorized) navigate('/login', { replace: true });
+      else setError(describeError(cause,'The report could not be exported.'));
     } finally {
       setBusy(false);
     }
-  };
+  }
 
-  const openCorrection = (record: AdminAttendanceRecord) => {
-    setEditing(record);
-    setSignIn(instantToAttendanceLocal(record.signInAt));
-    setSignOut(instantToAttendanceLocal(record.signOutAt));
+  function openCorrection(row: DailyAttendanceRow, event: MouseEvent<HTMLButtonElement>) {
+    correctionTrigger.current = event.currentTarget;
+    setEditing(row);
+    setSignIn(instantToAttendanceLocal(row.signInAt));
+    setSignOut(instantToAttendanceLocal(row.signOutAt));
     setReason('');
     setError(null);
     setSuccess(null);
-  };
+  }
 
-  /** Closes the correction form and returns focus to the button that opened it. */
-  const closeCorrection = () => {
+  function closeCorrection() {
     setEditing(null);
     correctionTrigger.current?.focus();
-  };
+  }
 
-  const handleCorrection = async (event: FormEvent<HTMLFormElement>) => {
+  async function handleCorrection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing || busy) {
-      return;
-    }
+    if (!editing?.recordId || busy) return;
     const signInAt = attendanceLocalToInstant(signIn);
     const signOutAt = signOut.trim() ? attendanceLocalToInstant(signOut) : null;
-    if (!signInAt) {
-      setError({ message: 'Please give the sign-in time.', hint: null });
-      return;
-    }
-    if (signOut.trim() && !signOutAt) {
-      setError({ message: 'Please give the sign-out time.', hint: null });
-      return;
-    }
-    if (reason.trim().length < 10) {
-      setError({ message: 'Please give a reason (at least 10 characters).', hint: null });
+    if (!signInAt || (signOut.trim() && !signOutAt) || reason.trim().length < 10) {
+      const message = !signInAt ? 'Please give the sign-in time.' : signOut.trim() && !signOutAt
+        ? 'Please give the sign-out time.' : 'Please give a reason (at least 10 characters).';
+      setError({ message, hint: null });
       return;
     }
     setBusy(true);
     setError(null);
     setSuccess(null);
     try {
-      await correctAttendance(editing.id, { signInAt, signOutAt, reason: reason.trim() });
+      await correctAttendance(editing.recordId,{ signInAt, signOutAt, reason: reason.trim() });
       setSuccess(`The attendance record of ${editing.employeeName} was corrected.`);
-      setEditing(null);
-      await loadRecords(page, { search, from, to, status });
+      closeCorrection();
+      setRevision(previous => previous + 1);
     } catch (cause) {
-      handleError(cause, 'The correction could not be saved.');
+      if (cause instanceof ApiError && cause.isUnauthorized) navigate('/login', { replace: true });
+      else setError(describeError(cause,'The correction could not be saved.'));
     } finally {
       setBusy(false);
     }
-  };
+  }
+
+  const pageCount = Math.ceil((report?.totalDays ?? 0) / PAGE_SIZE);
+  const metrics = report ? [
+    ['Expected staff', report.summary.expected], ['Present employees', report.summary.present],
+    ['Absent employees', report.summary.absent], ['Signed-out employees', report.summary.signedOut],
+  ] as const : [];
+  const dayScope = JSON.stringify([filters,page]);
 
   return (
-    <div className="dashboard">
-      <h1>Attendance</h1>
-
+    <div className="dashboard attendance-records">
+      <header>
+        <h1>Attendance Records</h1>
+        <p className="attendance-subtitle">Review employee attendance by working day and download filtered reports.</p>
+      </header>
       <ErrorBanner message={error?.message ?? null} hint={error?.hint ?? null} />
       <SuccessBanner message={success} />
-
-      <section className="card">
-        <div className="filter-row" role="group" aria-label="Report view">
-          <button
-            type="button"
-            className={`button ${view === 'overview' ? 'button-primary' : 'button-secondary'}`}
-            aria-pressed={view === 'overview'}
-            onClick={() => setView('overview')}
-          >
-            Daily overview
-          </button>
-          <button
-            type="button"
-            className={`button ${view === 'records' ? 'button-primary' : 'button-secondary'}`}
-            aria-pressed={view === 'records'}
-            onClick={() => setView('records')}
-          >
-            Records
-          </button>
-        </div>
-
-        {view === 'overview' ? (
-          <div className="form-field">
-            <label htmlFor="overview-date">Workday</label>
-            <input
-              id="overview-date"
-              name="overview-date"
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              disabled={loading}
-            />
-          </div>
-        ) : (
+      <section className="card" aria-labelledby="attendance-filters">
+        <h2 id="attendance-filters">Attendance filters</h2>
+        <form onSubmit={applyFilters}>
           <div className="filter-grid">
-            <div className="form-field">
-              <label htmlFor="filter-search">Employee</label>
-              <input
-                id="filter-search"
-                name="filter-search"
-                type="search"
-                placeholder="Name, number or email"
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                value={searchInput}
-                onChange={(event) => {
-                  setSearchInput(event.target.value);
-                  setPage(0);
-                }}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="filter-from">From</label>
-              <input
-                id="filter-from"
-                name="filter-from"
-                type="date"
-                value={from}
-                onChange={(event) => {
-                  setFrom(event.target.value);
-                  setPage(0);
-                }}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="filter-to">To</label>
-              <input
-                id="filter-to"
-                name="filter-to"
-                type="date"
-                value={to}
-                onChange={(event) => {
-                  setTo(event.target.value);
-                  setPage(0);
-                }}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="filter-status">State</label>
-              <select
-                id="filter-status"
-                name="filter-status"
-                value={status}
-                onChange={(event) => {
-                  setStatus(event.target.value as '' | 'SIGNED_IN' | 'SIGNED_OUT');
-                  setPage(0);
-                }}
-              >
-                <option value="">All</option>
-                <option value="SIGNED_IN">Signed in</option>
-                <option value="SIGNED_OUT">Signed out</option>
+            {(Object.keys(filterLabels) as (keyof typeof filterLabels)[]).map(key =>
+              <label className="form-field" key={key}>{filterLabels[key]}
+                <input type={key === 'search' ? 'search' : ['from','to','date'].includes(key) ? 'date' : 'text'}
+                  value={draft[key]} onChange={event => setDraft({ ...draft, [key]: event.target.value })} />
+              </label>
+            )}
+            <label className="form-field">Attendance status
+              <select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as '' | DailyAttendanceStatus })}>
+                <option value="">All statuses</option>
+                {(Object.entries(attendanceLabels)).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-            </div>
+            </label>
           </div>
-        )}
+          <div className="button-row">
+            <button type="submit" className="button button-primary" disabled={busy}>Apply filters</button>
+            <button type="button" className="button button-secondary" disabled={busy}
+              onClick={() => { setDraft(EMPTY_FILTERS); setFilters(EMPTY_FILTERS); setPage(0); setEditing(null); }}>Clear filters</button>
+            <button type="button" className="button button-secondary" disabled={busy || loading || !report}
+              onClick={() => void exportReport('pdf')}>Download PDF</button>
+            <button type="button" className="button button-secondary" disabled={busy || loading || !report}
+              onClick={() => void exportReport('csv')}>Download CSV</button>
+          </div>
+        </form>
       </section>
-
-      {view === 'overview' ? (
-        <section className="card" aria-labelledby="overview-heading">
-          <h2 id="overview-heading">Daily overview — {formatWorkday(date)}</h2>
-          <p className="hint">
-            &ldquo;Not signed in&rdquo; means that no record exists yet. It does not mean that the employee was
-            absent.
-          </p>
-          {loading ? (
-            <p className="page-status" role="status" aria-live="polite">
-              Loading the overview…
-            </p>
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <caption className="visually-hidden">Attendance state of every active employee</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Employee</th>
-                    <th scope="col">State</th>
-                    <th scope="col">Sign in</th>
-                    <th scope="col">Sign out</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overview.map((entry) => (
-                    <tr key={entry.employeeId}>
-                      <td>
-                        {entry.employeeName}
-                        <span className="cell-note"> {entry.employeeNumber}</span>
-                      </td>
-                      <td>
-                        <AttendanceStateBadge state={entry.state} />
-                        {entry.corrected ? <span className="cell-note"> corrected</span> : null}
-                      </td>
-                      <td>{formatTime(entry.signInAt)}</td>
-                      <td>{formatTime(entry.signOutAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      ) : (
-        <section className="card" aria-labelledby="records-heading">
-          <div className="section-header">
-            <h2 id="records-heading">Records</h2>
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={handleExport}
-              disabled={busy}
-            >
-              {busy ? 'Exporting…' : 'Export as PDF'}
-            </button>
-          </div>
-
-          {loading ? (
-            <p className="page-status" role="status" aria-live="polite">
-              Loading the records…
-            </p>
-          ) : records.length === 0 ? (
-            <p className="hint">No record matches these filters.</p>
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <caption className="visually-hidden">Attendance records</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Employee</th>
-                    <th scope="col">Workday</th>
-                    <th scope="col">State</th>
-                    <th scope="col">Sign in</th>
-                    <th scope="col">Sign out</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((record) => (
-                    <tr key={record.id}>
-                      <td>
-                        {record.employeeName}
-                        <span className="cell-note"> {record.employeeNumber}</span>
-                      </td>
-                      <td>{formatWorkday(record.attendanceDate)}</td>
-                      <td>
-                        <AttendanceStateBadge state={record.state} />
-                        {record.corrected ? (
-                          <span className="cell-note"> corrected {record.correctionCount}×</span>
-                        ) : null}
-                      </td>
-                      <td>{formatTime(record.signInAt)}</td>
-                      <td>{formatTime(record.signOutAt)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="button button-secondary"
-                          onClick={(event) => {
-                            correctionTrigger.current = event.currentTarget;
-                            openCorrection(record);
-                          }}
-                          disabled={busy}
-                        >
-                          Correct
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {totalPages > 1 ? (
-            <div className="button-row pagination">
-              <button
-                type="button"
-                className="button button-secondary"
-                disabled={page === 0}
-                onClick={() => setPage((current) => Math.max(0, current - 1))}
-              >
-                Previous
-              </button>
-              <span className="hint">
-                Page {page + 1} of {totalPages} — {totalElements} records
-              </span>
-              <button
-                type="button"
-                className="button button-secondary"
-                disabled={page + 1 >= totalPages}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Next
-              </button>
-            </div>
-          ) : null}
-        </section>
-      )}
-
       {editing ? (
         <section ref={correctionEditor} className="card reveal-editor" aria-labelledby="correction-heading">
           <h2 id="correction-heading">Correct the record of {editing.employeeName}</h2>
@@ -516,11 +228,28 @@ export function AttendancePage() {
           </form>
         </section>
       ) : null}
+      {loading ? <p role="status">Loading attendance records…</p> : report && <>
+        <section aria-label="Attendance totals for the displayed days">
+          <dl className="attendance-metrics" aria-label="Totals for displayed working days">
+            {metrics.map(([label,value]) => <div className="card" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+          </dl>
+          <p className="hint attendance-coverage">Totals cover the days shown. Expected staff counts use verified schedules.</p>
+        </section>
+        {report.days.length === 0 && <p className="card">No working days match the selected filters.</p>}
+        {report.days.map((day,index) => <AttendanceDayCard key={`${dayScope}:${day.date}`} day={day}
+          initiallyOpen={index === 0} onCorrect={openCorrection} />)}
+        {pageCount > 1 && <nav className="button-row pagination" aria-label="Attendance working days">
+          <button className="button button-secondary" type="button" disabled={page === 0 || busy}
+            onClick={() => { setEditing(null); setPage(page - 1); }}>Newer days</button>
+          <span>Page {page + 1} of {pageCount}</span>
+          <button className="button button-secondary" type="button" disabled={page + 1 >= pageCount || busy}
+            onClick={() => { setEditing(null); setPage(page + 1); }}>Older days</button>
+        </nav>}
+      </>}
     </div>
   );
 }
 
-/** Saves a file in the browser. */
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

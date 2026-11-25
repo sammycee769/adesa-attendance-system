@@ -1,6 +1,8 @@
 import { apiDownload, apiRequest, buildQuery } from './client';
 import type {
   AdminAttendanceRecord,
+  DailyAttendanceReport,
+  DailyAttendanceStatus,
   AdminDevice,
   AdminDeviceStatus,
   AttendanceCorrection,
@@ -134,9 +136,23 @@ export async function fetchAttendanceOverview(
   );
 }
 
-/** The attendance report as a PDF file. */
-export async function exportAttendancePdf(query: AttendanceQuery = {}): Promise<Blob> {
+export interface DailyAttendanceQuery extends Omit<AttendanceQuery, 'status'> {
+  date?: string;
+  subsidiary?: string;
+  department?: string;
+  status?: DailyAttendanceStatus;
+}
+
+export function fetchDailyAttendance(query: DailyAttendanceQuery, signal?: AbortSignal) {
+  return apiRequest<DailyAttendanceReport>(`/api/v1/admin/attendance/days${buildQuery({ ...query })}`, { signal });
+}
+
+export function exportAttendancePdf(query: DailyAttendanceQuery = {}) {
   return apiDownload('/api/v1/admin/attendance/export', { params: { ...query } });
+}
+
+export function exportAttendanceCsv(query: DailyAttendanceQuery = {}) {
+  return apiDownload('/api/v1/admin/attendance/export.csv', { params: { ...query }, contentType: 'text/csv' });
 }
 
 /** Corrects an attendance record. The reason is mandatory. */

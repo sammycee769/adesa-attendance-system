@@ -7,6 +7,8 @@ import java.util.UUID;
 import com.adesa.attendance.attendance.AttendanceReportFilter;
 import com.adesa.attendance.attendance.AttendanceReportService;
 import com.adesa.attendance.attendance.AttendanceState;
+import com.adesa.attendance.attendance.DailyAttendanceReport;
+import com.adesa.attendance.attendance.DailyAttendanceService;
 import com.adesa.attendance.attendance.dto.AdminAttendanceRecordResponse;
 import com.adesa.attendance.attendance.dto.AttendanceCorrectionRequest;
 import com.adesa.attendance.attendance.dto.AttendanceOverviewEntry;
@@ -48,8 +50,11 @@ public class AdminAttendanceController {
 
     private final AttendanceReportService attendanceReportService;
 
-    public AdminAttendanceController(AttendanceReportService attendanceReportService) {
+    private final DailyAttendanceService dailyAttendance;
+
+    public AdminAttendanceController(AttendanceReportService attendanceReportService, DailyAttendanceService dailyAttendance) {
         this.attendanceReportService = attendanceReportService;
+        this.dailyAttendance = dailyAttendance;
     }
 
     @GetMapping
@@ -80,22 +85,22 @@ public class AdminAttendanceController {
         return attendanceReportService.overview(date);
     }
 
+    @GetMapping("/days")
+    @PreAuthorize("hasAnyRole('HR','ADMIN')")
+    @Operation(summary = "Attendance grouped by working day")
+    public DailyAttendanceReport days(DailyAttendanceReport.Filter filter,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "7") @Min(1) @Max(31) int size) {
+        return dailyAttendance.read(filter, page, size, false);
+    }
+
     @GetMapping("/export")
     @PreAuthorize("hasAnyRole('HR','ADMIN')")
-    @Operation(summary = "Export attendance records as PDF",
-            description = "Requires HR or ADMIN. Accepts the same filters as the list endpoint and returns "
-                    + "a PDF report. Large exports are refused instead of being truncated silently.")
-    public ResponseEntity<byte[]> export(
-            @RequestParam(required = false) UUID employeeId,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) AttendanceState status) {
-        AttendanceReportFilter filter = new AttendanceReportFilter(employeeId, search, from, to, status);
-        List<AdminAttendanceRecordResponse> records = attendanceReportService.listForExport(filter);
-        byte[] pdf = AttendancePdfWriter.write(records, from, to);
-        String filename = "adesa-attendance-" + (from != null ? from : "all") + "-to-" + (to != null ? to : "all")
-                + ".pdf";
+    @Operation(summary = "Export daily attendance as a branded PDF")
+    public ResponseEntity<byte[]> export(DailyAttendanceReport.Filter filter) {
+        var report = dailyAttendance.read(filter, 0, 0, true);
+        byte[] pdf = AttendancePdfWriter.write(report, filter);
+        String filename = "adesa-attendance-" + report.from() + "-to-" + report.to() + ".pdf";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(MediaType.APPLICATION_PDF)
@@ -105,15 +110,9 @@ public class AdminAttendanceController {
 
     @GetMapping("/export.csv")
     @PreAuthorize("hasAnyRole('HR','ADMIN')")
-    @Operation(summary = "Export attendance records as CSV")
-    public ResponseEntity<byte[]> exportCsv(
-            @RequestParam(required = false) UUID employeeId,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) AttendanceState status) {
-        var filter = new AttendanceReportFilter(employeeId, search, from, to, status);
-        byte[] csv = AttendanceCsvWriter.write(attendanceReportService.listForExport(filter));
+    @Operation(summary = "Export daily attendance as CSV")
+    public ResponseEntity<byte[]> exportCsv(DailyAttendanceReport.Filter filter) {
+        byte[] csv = AttendanceCsvWriter.write(dailyAttendance.read(filter, 0, 0, true));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"adesa-attendance.csv\"")
                 .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))

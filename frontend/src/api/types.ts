@@ -207,3 +207,53 @@ export interface DeviceProof {
   deviceProofId: string;
   expiresAt: string;
 }
+
+export type DailyAttendanceStatus =
+  | 'PRESENT' | 'LATE' | 'ABSENT' | 'NOT_YET_SIGNED_IN' | 'SIGNED_OUT'
+  | 'INCOMPLETE_ATTENDANCE' | 'ON_APPROVED_LEAVE' | 'EXCUSED_ABSENCE' | 'REMOTE_WORK' | 'NOT_SCHEDULED';
+
+export interface DailyAttendanceRow {
+  recordId: string | null;
+  employeeId: string;
+  employeeNumber: string | null;
+  employeeName: string;
+  subsidiary: string | null;
+  department: string | null;
+  signInAt: string | null;
+  signOutAt: string | null;
+  workedMinutes: number | null;
+  status: DailyAttendanceStatus;
+  remarks: string;
+  expected: boolean;
+  late: boolean;
+  corrected: boolean;
+}
+
+export interface DailyAttendanceSummary {
+  workingDays: number;
+  expected: number;
+  present: number;
+  absent: number;
+  late: number;
+  signedOut: number;
+  yetToSignOut: number;
+  incomplete: number;
+  approvedAbsences: number;
+  expectedPresent: number;
+}
+
+export interface AttendanceDay {
+  date: string;
+  employees: DailyAttendanceRow[];
+  summary: DailyAttendanceSummary;
+}
+
+export interface DailyAttendanceReport {
+  from: string;
+  to: string;
+  timezone: string;
+  page: number;
+  totalDays: number;
+  days: AttendanceDay[];
+  summary: DailyAttendanceSummary;
+}

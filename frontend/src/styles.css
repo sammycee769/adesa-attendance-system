@@ -979,3 +979,28 @@ tbody tr:last-child > :is(td, th) {
 .reveal-editor {
   scroll-margin-top: 1rem;
 }
+
+.attendance-records .attendance-subtitle { margin: .25rem 0 .5rem; color: #516078; }
+.attendance-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); gap: .85rem; margin: 0; }
+.attendance-metrics .card { margin: 0; min-width: 0; }
+.attendance-metrics dt { color: #516078; font-size: .875rem; font-weight: 650; }
+.attendance-metrics dd { margin: .25rem 0 0; color: #112041; font-size: 1.85rem; font-weight: 750; }
+.attendance-coverage { margin: .6rem 0 0; }
+.attendance-records .attendance-day { padding: 0; overflow: hidden; }
+.attendance-day-header { padding: 1rem 1.15rem; }
+.attendance-day-header h2 { margin: 0; }
+.attendance-day-toggle { background: transparent; border: 0; color: #112041; font: inherit; padding: .1rem .15rem; text-align: left; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; }
+.attendance-chevron { flex: 0 0 .6rem; height: .6rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin: 0 .25rem .3rem 0; }
+.attendance-day-toggle[aria-expanded='true'] .attendance-chevron { transform: rotate(225deg); margin-bottom: -.2rem; }
+.attendance-day-counts, .attendance-day-detail { display: flex; flex-wrap: wrap; gap: .35rem 1.1rem; margin: .4rem 0 0; font-size: .875rem; color: #4e5d73; }
+.attendance-day-detail { font-size: .8rem; }
+.attendance-present { color: #146a43; }
+.attendance-absent { color: #a1242d; }
+.attendance-day-table { min-width: 62rem; }
+.attendance-day-table th[scope='row'] { font-weight: 650; }
+.attendance-day-table .attendance-clock { white-space: nowrap; }
+.attendance-badge { display: inline-block; border-radius: 999px; padding: .21rem .55rem; white-space: nowrap; font-size: .8rem; font-weight: 650; }
+.attendance-badge--present { color: #146a43; background: #e5f5ec; }
+.attendance-badge--absent { color: #a1242d; background: #fcecee; }
+.attendance-badge--attention { color: #824b0c; background: #fff1d8; }
+.attendance-badge--neutral { color: #43526c; background: #edf1f6; }

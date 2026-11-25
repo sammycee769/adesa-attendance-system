@@ -59,7 +59,7 @@ describe('protected screens', () => {
     );
 
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Attendance', level: 1 })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Attendance Records', level: 1 })).toBeNull();
   });
 
   it('redirects to the login page when a protected URL is opened directly', async () => {

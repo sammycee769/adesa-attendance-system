@@ -1,53 +1,43 @@
 package com.adesa.attendance.admin;
 
+import static com.adesa.attendance.admin.AttendanceReportLayout.*;
+
+import com.adesa.attendance.attendance.DailyAttendanceReport;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
 import java.util.List;
 
-import com.adesa.attendance.attendance.dto.AdminAttendanceRecordResponse;
-
-/**
- * Writes an attendance report as CSV.
- *
- * <p>Values that a spreadsheet would interpret as a formula are prefixed with
- * an apostrophe, so a name like {@code =cmd()} cannot become an executable
- * formula in Excel.
- */
 final class AttendanceCsvWriter {
+    private AttendanceCsvWriter() {}
 
-    /** The UTF-8 byte order mark, so Excel opens the file with the right encoding. */
-    private static final String UTF8_BOM = "﻿";
-
-    private AttendanceCsvWriter() {
-        // utility class
-    }
-
-    static byte[] write(List<AdminAttendanceRecordResponse> records) {
-        StringBuilder csv = new StringBuilder();
-        csv.append("Employee number,Employee name,Role,Workday,State,Sign in,Sign out,Corrected\n");
-
-        for (AdminAttendanceRecordResponse record : records) {
-            csv.append(cell(record.employeeNumber())).append(',')
-                    .append(cell(record.employeeName())).append(',')
-                    .append(cell(record.employeeRole())).append(',')
-                    .append(cell(record.attendanceDate() == null ? null : record.attendanceDate().toString())).append(',')
-                    .append(cell(record.state() == null ? null : record.state().name())).append(',')
-                    .append(cell(record.signInAt() == null ? null : record.signInAt().toString())).append(',')
-                    .append(cell(record.signOutAt() == null ? null : record.signOutAt().toString())).append(',')
-                    .append(record.corrected() ? "yes" : "no")
-                    .append('\n');
+    static byte[] write(DailyAttendanceReport report) {
+        var csv = new StringBuilder("\ufeff");
+        line(csv,List.of("ADESA HOLDINGS | Staff Attendance Report"));
+        line(csv,List.of("Reporting period",report.from().toString(),report.to().toString(),report.timezone()));
+        ZoneId zone = ZoneId.of(report.timezone());
+        for (var day : report.days()) {
+            csv.append('\n');
+            line(csv,List.of(DAY.format(day.date())));
+            var metrics = metrics(day.summary()).subList(1,9);
+            line(csv,metrics.stream().map(Metric::label).toList());
+            line(csv,metrics.stream().map(Metric::value).toList());
+            line(csv,COLUMNS);
+            int number = 0;
+            for (var employee : day.employees()) line(csv,cells(employee,++number,zone));
         }
-        return (UTF8_BOM + csv).getBytes(StandardCharsets.UTF_8);
+        csv.append('\n');
+        line(csv,List.of("Overall attendance summary"));
+        for (var metric : metrics(report.summary())) line(csv,List.of(metric.label(),metric.value()));
+        return csv.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Escapes a CSV cell and neutralises spreadsheet formulas. */
+    private static void line(StringBuilder csv, List<String> values) {
+        csv.append(String.join(",",values.stream().map(AttendanceCsvWriter::cell).toList())).append('\n');
+    }
+
     private static String cell(String value) {
-        if (value == null) {
-            return "";
-        }
-        String escaped = value.replace("\"", "\"\"");
-        if (!escaped.isEmpty() && "=+-@".indexOf(escaped.charAt(0)) >= 0) {
-            escaped = "'" + escaped;
-        }
-        return "\"" + escaped + "\"";
+        String trimmed = value.stripLeading();
+        if (!trimmed.isEmpty() && "=+-@".indexOf(trimmed.charAt(0)) >= 0) value = "'" + value;
+        return "\"" + value.replace("\"","\"\"") + "\"";
     }
 }

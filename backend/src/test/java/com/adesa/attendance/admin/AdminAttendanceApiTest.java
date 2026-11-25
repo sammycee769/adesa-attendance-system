@@ -363,12 +363,119 @@ class AdminAttendanceApiTest {
                         .with(authentication(asRole(EmployeeRole.EMPLOYEE))))
                 .andExpect(status().isForbidden());
         var response = mockMvc.perform(get("/api/v1/admin/attendance/export.csv")
+                        .param("from","2026-03-09").param("to","2026-03-09")
                         .with(authentication(asHr())))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("text/csv"))
                 .andReturn().getResponse();
         assertThat(response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
-                .contains("Employee number,Employee name", "CSV-001", "CSV Employee");
+                .contains("Monday, 9 March 2026", "Employee number", "CSV-001", "CSV Employee", "Overall attendance summary");
+    }
+
+    @Test
+    void groupedAttendanceUsesVerifiedEmploymentAndRosterForMissingClockIns() throws Exception {
+        var history = LocalDate.of(2026,1,12);
+        var today = LocalDate.now(java.time.ZoneId.of("Africa/Lagos"));
+        boolean remoteDay = today.getDayOfWeek() == java.time.DayOfWeek.TUESDAY
+                || today.getDayOfWeek() == java.time.DayOfWeek.THURSDAY;
+        UUID subsidiary = UUID.randomUUID();
+        jdbcTemplate.update("insert into subsidiaries(id,name,active,created_at,updated_at) values (?,'Roster Subsidiary',true,now(),now())",subsidiary);
+        UUID signed = createEmployee("DAY-01","Roster A Signed","roster.a@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID late = createEmployee("DAY-02","Roster B Late","roster.b@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID incomplete = createEmployee("DAY-03","Roster C Incomplete","roster.c@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID absent = createEmployee("DAY-04","Roster D Absent","roster.d@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID leave = createEmployee("DAY-05","Roster E Leave","roster.e@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID excused = createEmployee("DAY-06","Roster F Excused","roster.f@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID remote = createEmployee("DAY-07","Roster G Remote","roster.g@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID unscheduled = createEmployee("DAY-08","Roster H Not Scheduled","roster.h@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID newHire = createEmployee("DAY-09","Roster New Hire","roster.new@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID former = createEmployee("DAY-10","Roster Former Staff","roster.former@adesa.test",EmployeeRole.EMPLOYEE);
+        jdbcTemplate.update("update employees set is_active=false where id=?",former);
+        for (UUID staff : List.of(signed,late,incomplete,absent,former)) {
+            roster(staff,subsidiary,history,"OFFICE",history.minusDays(3),staff.equals(former) ? history : null);
+        }
+        roster(leave,subsidiary,history,"APPROVED_LEAVE",history,null);
+        roster(excused,subsidiary,history,"EXCUSED_ABSENCE",history,null);
+        roster(remote,subsidiary,history,"REMOTE",history,null);
+        roster(unscheduled,subsidiary,history,"NOT_SCHEDULED",history,null);
+        roster(unscheduled,subsidiary,history.plusDays(1),"NOT_SCHEDULED",history,null); // public holiday
+        roster(unscheduled,subsidiary,history.plusDays(5),"NOT_SCHEDULED",history,null); // weekend
+        roster(newHire,subsidiary,history.plusDays(2),"OFFICE",history.plusDays(2),null);
+        roster(signed,subsidiary,history.plusDays(3),"OFFICE",history.minusDays(3),null);
+        roster(absent,subsidiary,history.plusDays(3),"OFFICE",history.minusDays(3),null);
+        roster(absent,subsidiary,history.plusDays(1),"OFFICE",history.minusDays(3),null);
+        createRecord(signed,history.plusDays(3),at(history.plusDays(3),7),at(history.plusDays(3),16));
+        Instant upcoming = Instant.now().plusSeconds(600);
+        jdbcTemplate.update("""
+                insert into attendance_private.daily_roster(workday,employee_id,employment_start,subsidiary_id,department,
+                    arrangement,absence_at,shift_end,source_reference)
+                values (?,?,?,?,'Operations','OFFICE',?,?,'Approved test roster')
+                """,today,absent,history,subsidiary,java.sql.Timestamp.from(upcoming),java.sql.Timestamp.from(upcoming.plusSeconds(600)));
+        createRecord(signed,history,at(history,7),at(history,15));
+        createRecord(late,history,at(history,9),at(history,15));
+        UUID open = createRecord(incomplete,history,at(history,8),null);
+
+        String url = "/api/v1/admin/attendance/days";
+        mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get(url).with(authentication(asRole(EmployeeRole.EMPLOYEE)))).andExpect(status().isForbidden());
+        var query = get(url).param("from",history.toString()).param("to",history.plusDays(6).toString())
+                .param("subsidiary","Roster Subsidiary").param("department","Operations");
+        mockMvc.perform(query.with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalDays").value(4))
+                .andExpect(jsonPath("$.days[0].summary.present").value(1))
+                .andExpect(jsonPath("$.days[0].employees[?(@.status == 'REMOTE_WORK')].employeeNumber").value(org.hamcrest.Matchers.contains("DAY-04")))
+                .andExpect(jsonPath("$.days[2].employees[?(@.status == 'REMOTE_WORK')].employeeNumber").value(org.hamcrest.Matchers.contains("DAY-04")))
+                .andExpect(jsonPath("$.days[1].summary.absent").value(1))
+                .andExpect(jsonPath("$.days[3].employees.length()").value(9))
+                .andExpect(jsonPath("$.days[3].summary.present").value(3))
+                .andExpect(jsonPath("$.days[3].summary.expected").value(6))
+                .andExpect(jsonPath("$.days[3].summary.absent").value(2))
+                .andExpect(jsonPath("$.days[3].summary.signedOut").value(2))
+                .andExpect(jsonPath("$.days[3].summary.late").value(1))
+                .andExpect(jsonPath("$.days[3].summary.incomplete").value(1))
+                .andExpect(jsonPath("$.days[3].summary.approvedAbsences").value(2))
+                .andExpect(jsonPath("$.days[3].employees[?(@.status == 'REMOTE_WORK')]").isNotEmpty())
+                .andExpect(jsonPath("$.days[3].employees[?(@.status == 'EXCUSED_ABSENCE')]").isNotEmpty())
+                .andExpect(jsonPath("$.days[3].employees[?(@.status == 'ON_APPROVED_LEAVE')]").isNotEmpty())
+                .andExpect(jsonPath("$.days[3].employees[?(@.status == 'NOT_SCHEDULED')]").isNotEmpty());
+
+        mockMvc.perform(get(url).param("date",today.toString()).param("status",remoteDay ? "REMOTE_WORK" : "NOT_YET_SIGNED_IN").with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days[0].employees[0].employeeNumber").value("DAY-04"));
+        mockMvc.perform(get(url).param("from",history.toString()).param("to",history.plusDays(6).toString())
+                        .param("search","Roster").param("page","1").param("size","1").with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days.length()").value(1))
+                .andExpect(jsonPath("$.days[0].date").value(history.plusDays(2).toString()));
+
+        mockMvc.perform(patch("/api/v1/admin/attendance/{id}",open).with(authentication(asHr())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(Map.of(
+                        "signInAt",at(history,8).toString(),"signOutAt",at(history,16).toString(),"reason","Verified sign-out from supervisor"))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get(url).param("date",history.toString()).with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days[0].summary.incomplete").value(0))
+                .andExpect(jsonPath("$.days[0].summary.signedOut").value(3))
+                .andExpect(jsonPath("$.days[0].employees[?(@.corrected == true)]").isNotEmpty());
+        byte[] pdf = mockMvc.perform(get("/api/v1/admin/attendance/export").param("date",history.toString())
+                        .param("status","ABSENT").with(authentication(asHr())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        var reader = new com.lowagie.text.pdf.PdfReader(pdf);
+        try {
+            String extracted = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader).getTextFromPage(1);
+            assertThat(extracted).contains("Monday, 12 January 2026","Roster D Absent","Roster Former Staff","Absent 2")
+                    .doesNotContain("Roster A Signed");
+        } finally { reader.close(); }
+    }
+
+    private void roster(UUID employee, UUID subsidiary, LocalDate date, String arrangement, LocalDate start, LocalDate end) {
+        jdbcTemplate.update("""
+                insert into attendance_private.daily_roster(workday, employee_id, employment_start, employment_end,
+                    subsidiary_id, department, arrangement, late_after, absence_at, shift_end, source_reference)
+                values (?,?,?,?,?,'Operations',?,?,?,?,'Approved test roster')
+                """,date,employee,start,end,subsidiary,arrangement,
+                java.sql.Timestamp.from(at(date,8)),java.sql.Timestamp.from(at(date,10)),java.sql.Timestamp.from(at(date,16)));
+    }
+
+    private static Instant at(LocalDate date, int utcHour) {
+        return date.atTime(utcHour,0).toInstant(java.time.ZoneOffset.UTC);
     }
 
     @Test

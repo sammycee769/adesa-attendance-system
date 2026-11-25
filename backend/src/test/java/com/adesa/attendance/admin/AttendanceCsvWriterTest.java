@@ -1,81 +1,51 @@
 package com.adesa.attendance.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.adesa.attendance.attendance.DailyAttendanceReport.*;
 
+import com.adesa.attendance.attendance.DailyAttendanceReport;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-
-import com.adesa.attendance.attendance.AttendanceState;
-import com.adesa.attendance.attendance.dto.AdminAttendanceRecordResponse;
-
-import org.junit.jupiter.api.DisplayName;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/**
- * The CSV export of the attendance report.
- */
 class AttendanceCsvWriterTest {
+    private static final LocalDate DATE = LocalDate.of(2026,3,5);
 
-    private static AdminAttendanceRecordResponse record(String number, String name) {
-        return new AdminAttendanceRecordResponse(
-                java.util.UUID.randomUUID(),
-                java.util.UUID.randomUUID(),
-                number,
-                name,
-                "EMPLOYEE",
-                LocalDate.of(2026, 3, 5),
-                "Africa/Lagos",
-                AttendanceState.SIGNED_OUT,
-                Instant.parse("2026-03-05T07:45:00Z"),
-                Instant.parse("2026-03-05T15:30:00Z"),
-                true,
-                1,
-                Instant.parse("2026-03-05T15:30:00Z"));
+    private static DailyAttendanceReport report(String name) {
+        var row = new Row(null,UUID.randomUUID(),"EMP-001",name,"ADESA","Operations",
+                null,null,null,Status.ABSENT,"",true,false,false);
+        var rows = List.of(row);
+        var days = List.of(new Day(DATE,rows,Summary.day(rows)));
+        return new DailyAttendanceReport(DATE,DATE,Instant.EPOCH,"Africa/Lagos",0,1,days,Summary.of(days));
     }
 
     @Test
-    @DisplayName("The export has a header row and one row per record")
-    void writesHeaderAndRows() {
-        String csv = new String(
-                AttendanceCsvWriter.write(List.of(record("EMP-001", "Amina Bello"))), StandardCharsets.UTF_8);
-
-        assertThat(csv).contains("Employee number,Employee name,Role,Workday,State,Sign in,Sign out,Corrected");
-        assertThat(csv).contains("\"EMP-001\"");
-        assertThat(csv).contains("\"Amina Bello\"");
-        assertThat(csv).contains("\"2026-03-05\"");
-        assertThat(csv).contains("\"SIGNED_OUT\"");
-        assertThat(csv).contains("yes");
+    void writesDailyAndOverallSummariesWithAbsentEmployee() {
+        String csv = new String(AttendanceCsvWriter.write(report("Amina Bello")),StandardCharsets.UTF_8);
+        assertThat(csv).contains("Thursday, 5 March 2026","Employee number","EMP-001","Amina Bello",
+                "\"–\",\"–\",\"–\",\"Absent\"","Overall attendance summary","Attendance percentage");
     }
 
     @Test
-    @DisplayName("A value that a spreadsheet would run as a formula is neutralised")
     void neutralisesFormulas() {
-        String csv = new String(
-                AttendanceCsvWriter.write(List.of(record("EMP-002", "=cmd|'/c calc'!A1"))),
-                StandardCharsets.UTF_8);
-
-        assertThat(csv).contains("\"'=cmd|'/c calc'!A1\"");
-        assertThat(csv).doesNotContain("\"=cmd");
+        String csv = new String(AttendanceCsvWriter.write(report("  =SUM(1,2)")),StandardCharsets.UTF_8);
+        assertThat(csv).contains("\"'  =SUM(1,2)\"").doesNotContain("\"  =SUM");
     }
 
     @Test
-    @DisplayName("A value with a quote is escaped")
     void escapesQuotes() {
-        String csv = new String(
-                AttendanceCsvWriter.write(List.of(record("EMP-003", "Ada \"Bello\""))), StandardCharsets.UTF_8);
-
+        String csv = new String(AttendanceCsvWriter.write(report("Ada \"Bello\"")),StandardCharsets.UTF_8);
         assertThat(csv).contains("\"Ada \"\"Bello\"\"\"");
     }
 
     @Test
-    @DisplayName("The export starts with the byte order mark, so Excel reads UTF-8")
     void startsWithByteOrderMark() {
-        byte[] csv = AttendanceCsvWriter.write(List.of());
-
-        assertThat(csv[0]).isEqualTo((byte) 0xEF);
-        assertThat(csv[1]).isEqualTo((byte) 0xBB);
-        assertThat(csv[2]).isEqualTo((byte) 0xBF);
+        byte[] csv = AttendanceCsvWriter.write(report("Amina Bello"));
+        assertThat(csv[0]).isEqualTo((byte)0xEF);
+        assertThat(csv[1]).isEqualTo((byte)0xBB);
+        assertThat(csv[2]).isEqualTo((byte)0xBF);
     }
 }
