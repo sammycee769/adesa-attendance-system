@@ -48,7 +48,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * transactional correction with its audit trail, the CSV export and the
  * restricted HR view of the audit log.
  */
-@SpringBootTest(properties = "attendance.reporting.weekday-policy-from=2026-11-01")
+@SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
 class AdminAttendanceApiTest {
@@ -526,6 +526,17 @@ class AdminAttendanceApiTest {
                         .param("search","Standard Weekday").param("status","REMOTE_WORK").with(authentication(asHr())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.days.length()").value(1))
                 .andExpect(jsonPath("$.days[0].employees[0].expectedOfficeDays").value(3));
+        mockMvc.perform(get(route + "/days").param("from","2026-11-23").param("to","2026-11-24")
+                        .param("search","Standard Weekday").with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days.length()").value(2))
+                .andExpect(jsonPath("$.days[0].employees[0].expectedOfficeDays").value(1))
+                .andExpect(jsonPath("$.summary.absent").value(1));
+
+        UUID fullPeriod = createEmployee("WEEK-003","Full Period Staff","full-period-weekday@adesa.test",EmployeeRole.EMPLOYEE);
+        jdbcTemplate.update("update employees set created_at='2026-11-02T00:00:00Z' where id=?",fullPeriod);
+        mockMvc.perform(get(route + "/days").param("from","2026-11-02").param("to","2026-11-25")
+                        .param("search","WEEK-003").with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days[0].employees[0].expectedOfficeDays").value(11));
     }
 
     private void roster(UUID employee, UUID subsidiary, LocalDate date, String arrangement, LocalDate start, LocalDate end) {

@@ -54,7 +54,7 @@ login schema usage, SELECT and INSERT on the roster through the private connecti
   evidence does not count as present.
 - Existing clock records remain in the report when there is no verified
   schedule. These rows carry a **Schedule unverified** remark. They never
-  generate assumed absences before the weekday policy.
+  generate assumed absences outside their verified or standard schedule.
   An unclosed recorded workday with no known shift
   end becomes incomplete after its Lagos calendar day closes.
 - The weekday policy and verified roster exceptions establish who was expected. Leave, excused absence and
@@ -89,8 +89,7 @@ deployment IDs, and push only the tested Batch 0 commit. Wait for CI. Stage
 the frontend on Vercel, deploy the backend to Render, verify V20 and HR/Admin
 API access, and confirm employee access is denied. Promote the staged frontend
 and verify the live filters, grouped summaries, an approved correction test
-and both export formats. Obtain verified roster data before reporting absences outside the effective
-weekday policy period.
+and both export formats. Obtain verified roster data for historical employment or schedule exceptions that the current directory cannot establish.
 
 For rollback, restore the prior Vercel deployment and the prior Render build.
 V20 is additive and can remain in the database, preserving any approved roster
@@ -100,19 +99,19 @@ actual data corruption and requires its own approval.
 
 ## Standard weekday policy
 
-From 25 November 2026, the daily view and both ordinary exports automatically
-include active employees with accounts already created by the workday. Verified
+The daily view and both ordinary exports apply the standard weekday rule from
+the selected start date through the selected end date, up to the current
+Lagos day. They include active employees with accounts already created by
+the workday. Verified
 roster entries take precedence. With the standard policy, a missed clock-in
 on Monday, Wednesday or Friday counts as absent after the Lagos workday ends.
 A missed Tuesday or Thursday clock-in is remote work. Approved leave,
 excused absence and non-working schedules retain their specific statuses.
 A missed sign-out remains incomplete attendance.
 
-The effective date can be configured with
-`attendance.reporting.weekday-policy-from` once HR approves an earlier range.
-Older dates retain verified roster entries and actual clock records. Accounts
-that are now inactive need verified historical roster entries to classify
-missing days. No attendance rows are inserted by a report.
+Accounts that are now inactive need verified historical roster entries to
+classify missing days. Original clock records and verified schedule exceptions
+are retained across date ranges. No attendance rows are inserted by a report.
 
 The roster setup panel is off the attendance page. Authorized HR/Admin API
 operations remain available for verified schedule exceptions or historical

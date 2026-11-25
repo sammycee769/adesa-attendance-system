@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -34,7 +33,7 @@ public class DailyAttendanceService {
                 SELECT * FROM attendance_private.daily_roster WHERE workday BETWEEN :from AND :to
             ), weekdays AS (
                 SELECT date_value::date AS day
-                FROM generate_series(greatest(CAST(:from AS date), CAST(:policyFrom AS date)),
+                FROM generate_series(CAST(:from AS date),
                     least(CAST(:to AS date), CAST(:today AS date)), interval '1 day') AS dates(date_value)
                 WHERE extract(isodow FROM date_value) BETWEEN 1 AND 5
             ), defaults AS (
@@ -102,13 +101,9 @@ public class DailyAttendanceService {
     private final NamedParameterJdbcTemplate jdbc;
     private final WorkdayResolver workdays;
 
-    private final LocalDate policyFrom;
-
-    public DailyAttendanceService(NamedParameterJdbcTemplate jdbc, WorkdayResolver workdays,
-            @Value("${attendance.reporting.weekday-policy-from:2026-11-25}") LocalDate policyFrom) {
+    public DailyAttendanceService(NamedParameterJdbcTemplate jdbc, WorkdayResolver workdays) {
         this.jdbc = jdbc;
         this.workdays = workdays;
-        this.policyFrom = policyFrom;
     }
 
     @Transactional(readOnly = true)
@@ -131,7 +126,7 @@ public class DailyAttendanceService {
         long skip = export ? 0 : (long) page * size;
         var params = new MapSqlParameterSource()
                 .addValue("from",start).addValue("to",end).addValue("today",today)
-                .addValue("policyFrom",policyFrom).addValue("zone",workdays.zoneId())
+                .addValue("zone",workdays.zoneId())
                 .addValue("now",now.atOffset(java.time.ZoneOffset.UTC))
                 .addValue("employee",filter.employeeId()).addValue("search",normalized(filter.search()))
                 .addValue("subsidiary",normalized(filter.subsidiary())).addValue("department",normalized(filter.department()))
