@@ -4,7 +4,8 @@ The HR and Admin Attendance Records page and its PDF and CSV downloads read the
 same daily report query. Records are sorted by Lagos workday, most recent first.
 The page requests seven matched working dates at a time and its cards total the
 displayed days. The exports cover the entire selected period and include
-overall totals. Reports allow up to 366 calendar days and refuse more than
+overall totals, followed by a cumulative table with days present and days absent
+for each employee in the filtered report. Reports allow up to 366 calendar days and refuse more than
 10,000 employee rows instead of silently truncating a report.
 
 ## Source of expected attendance
@@ -35,7 +36,7 @@ absolute instants using the Africa/Lagos offset when interpreting local
 times. The approved lateness threshold may be omitted where unavailable.
 The schema has no direct browser or Supabase Data API route. If the deployment
 uses separate Flyway and application principals, grant the Spring application
-login schema usage and SELECT on the roster through the private connection.
+login schema usage, SELECT and INSERT on the roster through the private connection.
 
 ## Classification and counts
 
@@ -94,3 +95,23 @@ V20 is additive and can remain in the database, preserving any approved roster
 data already loaded. Recheck backend health, access controls, and the old
 attendance page and exports. A database restore is a separate decision for
 actual data corruption and requires its own approval.
+
+## Importing an approved roster
+
+Admin and HR can open **Include staff who did not clock in** on Attendance
+Records. Download an all-active-staff template for a selected day, complete
+the approved fields in a spreadsheet, and save it as a UTF-8 tab-separated
+file. Keep the employee number and date columns as text to preserve their format. For a multiday import, add one row per employee and workday. Former
+staff can be included by employee number when their approved historical
+employment dates cover the selected day. Confirm the roster source before
+importing. Dates and clock rules must use the formats listed in the form.
+
+An import validates the whole file, rejects duplicate or previously verified
+employee-days, and writes an audit entry. It does not generate clock records.
+Verified rows appear in the grouped page and both filtered exports. Use up to
+2,000 rows per import. The template uses the current active directory as a
+starting list. HR verifies who was actually scheduled for the selected dates.
+
+The two HR/Admin routes are `GET /api/v1/admin/attendance/roster/template?date=YYYY-MM-DD`
+and `POST /api/v1/admin/attendance/roster`. This workflow uses V20 and requires
+no additional migration.

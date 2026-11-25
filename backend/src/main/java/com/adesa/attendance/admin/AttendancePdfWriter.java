@@ -73,6 +73,8 @@ final class AttendancePdfWriter {
                     + "are included in Present and excluded from the attendance percentage.",font(8,GREY,false));
             note.setSpacingBefore(7);
             doc.add(note);
+            var employeeTotals = employeeTotals(report);
+            if (!employeeTotals.isEmpty()) doc.add(employeeSummary(employeeTotals));
             doc.close();
             return output.toByteArray();
         } catch (Exception ex) {
@@ -137,6 +139,30 @@ final class AttendancePdfWriter {
             card.addElement(new Paragraph(metric.label(),font(9,GREY,false)));
             card.addElement(new Paragraph(metric.value(),font(14,NAVY,true)));
             table.addCell(card);
+        }
+        return table;
+    }
+
+    private static PdfPTable employeeSummary(java.util.List<EmployeeTotal> employees) {
+        var table = new PdfPTable(new float[]{16,48,18,18});
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(15);
+        table.setHeaderRows(2);
+        table.setSplitRows(false);
+        var heading = new PdfPCell(new Phrase(EMPLOYEE_TOTAL_HEADING,font(13,NAVY,true)));
+        heading.setColspan(EMPLOYEE_TOTAL_COLUMNS.size());
+        heading.setBorder(Rectangle.NO_BORDER);
+        heading.setPaddingBottom(7);
+        table.addCell(heading);
+        for (String label : EMPLOYEE_TOTAL_COLUMNS) table.addCell(cell(new Phrase(label,font(9,NAVY,true)),LIGHT));
+        for (var employee : employees) {
+            var columns = employee.cells();
+            for (int index = 0; index < columns.size(); index++) {
+                Color colour = index == 2 ? GREEN : index == 3 ? RED : NAVY;
+                var value = cell(new Phrase(columns.get(index),font(9,colour,index >= 2)),null);
+                if (index >= 2) value.setHorizontalAlignment(Element.ALIGN_RIGHT);
+                table.addCell(value);
+            }
         }
         return table;
     }

@@ -465,6 +465,40 @@ class AdminAttendanceApiTest {
         } finally { reader.close(); }
     }
 
+    @Test
+    void importsVerifiedRosterAtomicallyAndExportsEmployeesWithoutPunches() throws Exception {
+        createEmployee("IMPORT-001","Roster Import First","roster-import-first@adesa.test",EmployeeRole.EMPLOYEE);
+        createEmployee("IMPORT-002","Roster Import Second","roster-import-second@adesa.test",EmployeeRole.EMPLOYEE);
+        String root = "/api/v1/admin/attendance";
+        String template = mockMvc.perform(get(root + "/roster/template").param("date","2026-02-02")
+                        .with(authentication(asAdmin())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(template).contains("IMPORT-001\t2026-02-02", "IMPORT-002\t2026-02-02");
+        String heading = template.substring(0,template.indexOf('\n'));
+        String first = "IMPORT-001\t2026-02-02\t2026-01-01\t\t\tOperations\tOFFICE\t\t2026-02-02T12:00\t2026-02-02T17:00\t";
+        String second = first.replace("IMPORT-001","IMPORT-002");
+        String body = objectMapper.writeValueAsString(Map.of("rows",heading + "\n" + first, "sourceReference","HR roster", "verified",true));
+        mockMvc.perform(post(root + "/roster").with(authentication(asRole(EmployeeRole.EMPLOYEE))).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mockMvc.perform(post(root + "/roster").with(authentication(asHr()))
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mockMvc.perform(post(root + "/roster").with(authentication(asHr())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(1));
+        var conflicting = objectMapper.writeValueAsString(Map.of("rows",heading + "\n" + second + "\n" + first,
+                "sourceReference","HR roster","verified",true));
+        mockMvc.perform(post(root + "/roster").with(authentication(asHr())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(conflicting)).andExpect(status().isConflict());
+        assertThat(jdbcTemplate.queryForObject("select count(*) from attendance_private.daily_roster where workday='2026-02-02'",Integer.class))
+                .isEqualTo(1);
+        var csv = mockMvc.perform(get(root + "/export.csv").param("date","2026-02-02").with(authentication(asAdmin())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csv).contains("IMPORT-001","Absent","Overall attendance summary")
+                .doesNotContain("IMPORT-002");
+        assertThat(jdbcTemplate.queryForObject("select count(*) from attendance_records where attendance_date='2026-02-02'",Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("select count(*) from audit_logs where action='ATTENDANCE_ROSTER_IMPORTED'",Integer.class)).isEqualTo(1);
+    }
+
     private void roster(UUID employee, UUID subsidiary, LocalDate date, String arrangement, LocalDate start, LocalDate end) {
         jdbcTemplate.update("""
                 insert into attendance_private.daily_roster(workday, employee_id, employment_start, employment_end,

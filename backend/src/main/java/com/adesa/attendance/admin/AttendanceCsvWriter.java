@@ -28,6 +28,13 @@ final class AttendanceCsvWriter {
         csv.append('\n');
         line(csv,List.of("Overall attendance summary"));
         for (var metric : metrics(report.summary())) line(csv,List.of(metric.label(),metric.value()));
+        var employeeTotals = employeeTotals(report);
+        if (!employeeTotals.isEmpty()) {
+            csv.append('\n');
+            line(csv,List.of(EMPLOYEE_TOTAL_HEADING));
+            line(csv,EMPLOYEE_TOTAL_COLUMNS);
+            for (var employee : employeeTotals) line(csv,employee.cells());
+        }
         return csv.toString().getBytes(StandardCharsets.UTF_8);
     }
 

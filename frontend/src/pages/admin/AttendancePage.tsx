@@ -8,6 +8,7 @@ import { describeError } from '../../utils/errors';
 import { ATTENDANCE_TIMEZONE, attendanceLocalToInstant, instantToAttendanceLocal } from '../../utils/format';
 import { useRevealEditor } from '../../utils/useRevealEditor';
 import { AttendanceDayCard, attendanceLabels } from './AttendanceDayCard';
+import { AttendanceRosterPanel } from './AttendanceRosterPanel';
 
 const PAGE_SIZE = 7;
 const EMPTY_FILTERS = { from: '', to: '', date: '', search: '', subsidiary: '', department: '', status: '' as '' | DailyAttendanceStatus };
@@ -164,6 +165,10 @@ export function AttendancePage() {
           </div>
         </form>
       </section>
+      <AttendanceRosterPanel download={downloadBlob} onImported={count => {
+        setSuccess(`Imported ${count} verified roster entries.`);
+        setRevision(previous => previous + 1);
+      }} />
       {editing ? (
         <section ref={correctionEditor} className="card reveal-editor" aria-labelledby="correction-heading">
           <h2 id="correction-heading">Correct the record of {editing.employeeName}</h2>

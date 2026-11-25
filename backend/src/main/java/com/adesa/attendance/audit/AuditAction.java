@@ -61,5 +61,6 @@ public enum AuditAction {
     /** An attendance action that was refused (network, device proof, sequence). */
     ATTENDANCE_ACTION_REJECTED,
     /** A manual correction of an attendance record by HR or an administrator. */
-    ATTENDANCE_CORRECTED
+    ATTENDANCE_CORRECTED,
+    ATTENDANCE_ROSTER_IMPORTED
 }

@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.adesa.attendance.attendance.AttendanceReportFilter;
 import com.adesa.attendance.attendance.AttendanceReportService;
 import com.adesa.attendance.attendance.AttendanceState;
+import com.adesa.attendance.attendance.AttendanceRosterImport;
 import com.adesa.attendance.attendance.DailyAttendanceReport;
 import com.adesa.attendance.attendance.DailyAttendanceService;
 import com.adesa.attendance.attendance.dto.AdminAttendanceRecordResponse;
@@ -52,9 +53,13 @@ public class AdminAttendanceController {
 
     private final DailyAttendanceService dailyAttendance;
 
-    public AdminAttendanceController(AttendanceReportService attendanceReportService, DailyAttendanceService dailyAttendance) {
+    private final AttendanceRosterImport rosters;
+
+    public AdminAttendanceController(AttendanceReportService attendanceReportService,
+                                     DailyAttendanceService dailyAttendance, AttendanceRosterImport rosters) {
         this.attendanceReportService = attendanceReportService;
         this.dailyAttendance = dailyAttendance;
+        this.rosters = rosters;
     }
 
     @GetMapping
@@ -118,6 +123,26 @@ public class AdminAttendanceController {
                 .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
                 .contentLength(csv.length)
                 .body(csv);
+    }
+
+    @GetMapping("/roster/template")
+    @PreAuthorize("hasAnyRole('HR','ADMIN')")
+    public ResponseEntity<byte[]> rosterTemplate(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"attendance-roster-" + date + ".tsv\"")
+                .contentType(MediaType.parseMediaType("text/tab-separated-values;charset=UTF-8"))
+                .body(rosters.template(date));
+    }
+
+    public record RosterUpload(String rows, String sourceReference, boolean verified) {}
+
+    @org.springframework.web.bind.annotation.PostMapping("/roster")
+    @PreAuthorize("hasAnyRole('HR','ADMIN')")
+    public java.util.Map<String,Integer> importRoster(@RequestBody RosterUpload upload, Authentication authentication) {
+        if (!upload.verified()) throw new com.adesa.attendance.common.BadRequestException("Confirm the roster against approved schedules");
+        int imported = rosters.load(upload.rows(),upload.sourceReference(),AuthenticatedEmployee.actorId(authentication));
+        return java.util.Map.of("imported",imported);
     }
 
     @PatchMapping("/{id}")
