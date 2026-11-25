@@ -28,10 +28,10 @@ class AttendanceEmployeeTotalsTest {
 
         var totals = AttendanceReportLayout.employeeTotals(report);
         assertThat(totals).extracting(AttendanceReportLayout.EmployeeTotal::cells)
-                .containsExactly(List.of("ST-01","Ada Bello","1","1"),List.of("ST-02","Ada Bello","1","1"));
+                .containsExactly(List.of("ST-01","Ada Bello","1","1","2"),List.of("ST-02","Ada Bello","1","1","1"));
         String csv = new String(AttendanceCsvWriter.write(report),StandardCharsets.UTF_8);
         assertThat(csv.substring(csv.indexOf("Cumulative attendance by employee")))
-                .contains("Days present","Days absent","\"ST-01\",\"Ada Bello\",\"1\",\"1\"",
+                .contains("Days present","Days absent","Expected office days","\"ST-01\",\"Ada Bello\",\"1\",\"1\"",
                         "\"ST-02\",\"Ada Bello\",\"1\",\"1\"");
 
         var pdf = new PdfReader(AttendancePdfWriter.write(report,filter));
@@ -42,7 +42,7 @@ class AttendanceEmployeeTotalsTest {
                 text.append(extractor.getTextFromPage(page)).append('\n');
             }
             assertThat(text.substring(text.indexOf("Cumulative attendance by employee")))
-                    .contains("Days present","Days absent","ST-01","ST-02","Ada Bello");
+                    .contains("Days present","Days absent","Expected office days","ST-01","ST-02","Ada Bello");
         } finally { pdf.close(); }
     }
 
@@ -53,6 +53,6 @@ class AttendanceEmployeeTotalsTest {
     private static Row row(UUID employeeId, String number, Status status) {
         Instant signIn = status == Status.INCOMPLETE_ATTENDANCE || status == Status.LATE ? Instant.EPOCH : null;
         return new Row(null,employeeId,number,"Ada Bello","ADESA","Operations",signIn,null,null,
-                status,"",status != Status.ON_APPROVED_LEAVE,status == Status.LATE,false);
+                status,"",status != Status.ON_APPROVED_LEAVE,status == Status.LATE,false,number.equals("ST-01") ? 2 : 1);
     }
 }

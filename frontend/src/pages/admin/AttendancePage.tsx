@@ -8,7 +8,6 @@ import { describeError } from '../../utils/errors';
 import { ATTENDANCE_TIMEZONE, attendanceLocalToInstant, instantToAttendanceLocal } from '../../utils/format';
 import { useRevealEditor } from '../../utils/useRevealEditor';
 import { AttendanceDayCard, attendanceLabels } from './AttendanceDayCard';
-import { AttendanceRosterPanel } from './AttendanceRosterPanel';
 
 const PAGE_SIZE = 7;
 const EMPTY_FILTERS = { from: '', to: '', date: '', search: '', subsidiary: '', department: '', status: '' as '' | DailyAttendanceStatus };
@@ -165,10 +164,6 @@ export function AttendancePage() {
           </div>
         </form>
       </section>
-      <AttendanceRosterPanel download={downloadBlob} onImported={count => {
-        setSuccess(`Imported ${count} verified roster entries.`);
-        setRevision(previous => previous + 1);
-      }} />
       {editing ? (
         <section ref={correctionEditor} className="card reveal-editor" aria-labelledby="correction-heading">
           <h2 id="correction-heading">Correct the record of {editing.employeeName}</h2>
@@ -238,7 +233,7 @@ export function AttendancePage() {
           <dl className="attendance-metrics" aria-label="Totals for displayed working days">
             {metrics.map(([label,value]) => <div className="card" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
-          <p className="hint attendance-coverage">Totals cover the days shown. Expected staff counts use verified schedules.</p>
+          <p className="hint attendance-coverage">Totals cover the days shown. Expected staff counts use the standard weekday policy and approved schedule exceptions.</p>
         </section>
         {report.days.length === 0 && <p className="card">No working days match the selected filters.</p>}
         {report.days.map((day,index) => <AttendanceDayCard key={`${dayScope}:${day.date}`} day={day}

@@ -69,7 +69,7 @@ final class AttendancePdfWriter {
             if (report.days().isEmpty()) doc.add(new Paragraph("No working days match the selected filters.",font(10,GREY,false)));
             for (Day day : report.days()) doc.add(dayTable(day,zone));
             doc.add(summary(report));
-            var note = new Paragraph("Expected attendance uses verified rosters. Recorded clock-ins without a verified schedule "
+            var note = new Paragraph("Expected attendance uses the standard weekday policy and verified schedule exceptions. Clock-ins without a known expectation "
                     + "are included in Present and excluded from the attendance percentage.",font(8,GREY,false));
             note.setSpacingBefore(7);
             doc.add(note);
@@ -144,7 +144,7 @@ final class AttendancePdfWriter {
     }
 
     private static PdfPTable employeeSummary(java.util.List<EmployeeTotal> employees) {
-        var table = new PdfPTable(new float[]{16,48,18,18});
+        var table = new PdfPTable(new float[]{16,36,15,15,18});
         table.setWidthPercentage(100);
         table.setSpacingBefore(15);
         table.setHeaderRows(2);

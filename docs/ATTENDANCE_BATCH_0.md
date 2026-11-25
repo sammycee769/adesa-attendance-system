@@ -4,8 +4,9 @@ The HR and Admin Attendance Records page and its PDF and CSV downloads read the
 same daily report query. Records are sorted by Lagos workday, most recent first.
 The page requests seven matched working dates at a time and its cards total the
 displayed days. The exports cover the entire selected period and include
-overall totals, followed by a cumulative table with days present and days absent
-for each employee in the filtered report. Reports allow up to 366 calendar days and refuse more than
+overall totals, followed by a cumulative table with days present, days absent and expected Monday, Wednesday
+and Friday office days for each employee in the filtered report. The expected
+office-day count covers the selected dates even when filtering by status. Reports allow up to 366 calendar days and refuse more than
 10,000 employee rows instead of silently truncating a report.
 
 ## Source of expected attendance
@@ -53,9 +54,10 @@ login schema usage, SELECT and INSERT on the roster through the private connecti
   evidence does not count as present.
 - Existing clock records remain in the report when there is no verified
   schedule. These rows carry a **Schedule unverified** remark. They never
-  generate assumed absences. An unclosed recorded workday with no known shift
+  generate assumed absences before the weekday policy.
+  An unclosed recorded workday with no known shift
   end becomes incomplete after its Lagos calendar day closes.
-- The roster establishes who was expected. Leave, excused absence and
+- The weekday policy and verified roster exceptions establish who was expected. Leave, excused absence and
   not-scheduled employees are excluded from expected count. Present includes
   recorded arrivals, including late, signed-out and incomplete records. Yet
   to sign out excludes incomplete records. Overall attendance percentage is
@@ -87,8 +89,8 @@ deployment IDs, and push only the tested Batch 0 commit. Wait for CI. Stage
 the frontend on Vercel, deploy the backend to Render, verify V20 and HR/Admin
 API access, and confirm employee access is denied. Promote the staged frontend
 and verify the live filters, grouped summaries, an approved correction test
-and both export formats. Obtain verified roster data before enabling historical
-absence reporting for real staff.
+and both export formats. Obtain verified roster data before reporting absences outside the effective
+weekday policy period.
 
 For rollback, restore the prior Vercel deployment and the prior Render build.
 V20 is additive and can remain in the database, preserving any approved roster
@@ -96,22 +98,22 @@ data already loaded. Recheck backend health, access controls, and the old
 attendance page and exports. A database restore is a separate decision for
 actual data corruption and requires its own approval.
 
-## Importing an approved roster
+## Standard weekday policy
 
-Admin and HR can open **Include staff who did not clock in** on Attendance
-Records. Download an all-active-staff template for a selected day, complete
-the approved fields in a spreadsheet, and save it as a UTF-8 tab-separated
-file. Keep the employee number and date columns as text to preserve their format. For a multiday import, add one row per employee and workday. Former
-staff can be included by employee number when their approved historical
-employment dates cover the selected day. Confirm the roster source before
-importing. Dates and clock rules must use the formats listed in the form.
+From 25 November 2026, the daily view and both ordinary exports automatically
+include active employees with accounts already created by the workday. Verified
+roster entries take precedence. With the standard policy, a missed clock-in
+on Monday, Wednesday or Friday counts as absent after the Lagos workday ends.
+A missed Tuesday or Thursday clock-in is remote work. Approved leave,
+excused absence and non-working schedules retain their specific statuses.
+A missed sign-out remains incomplete attendance.
 
-An import validates the whole file, rejects duplicate or previously verified
-employee-days, and writes an audit entry. It does not generate clock records.
-Verified rows appear in the grouped page and both filtered exports. Use up to
-2,000 rows per import. The template uses the current active directory as a
-starting list. HR verifies who was actually scheduled for the selected dates.
+The effective date can be configured with
+`attendance.reporting.weekday-policy-from` once HR approves an earlier range.
+Older dates retain verified roster entries and actual clock records. Accounts
+that are now inactive need verified historical roster entries to classify
+missing days. No attendance rows are inserted by a report.
 
-The two HR/Admin routes are `GET /api/v1/admin/attendance/roster/template?date=YYYY-MM-DD`
-and `POST /api/v1/admin/attendance/roster`. This workflow uses V20 and requires
-no additional migration.
+The roster setup panel is off the attendance page. Authorized HR/Admin API
+operations remain available for verified schedule exceptions or historical
+imports.

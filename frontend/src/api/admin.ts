@@ -155,16 +155,6 @@ export function exportAttendanceCsv(query: DailyAttendanceQuery = {}) {
   return apiDownload('/api/v1/admin/attendance/export.csv', { params: { ...query }, contentType: 'text/csv' });
 }
 
-export function downloadAttendanceRosterTemplate(date: string) {
-  return apiDownload('/api/v1/admin/attendance/roster/template', { params: { date }, contentType: 'text/tab-separated-values' });
-}
-
-export function importAttendanceRoster(rows: string, sourceReference: string, verified: boolean) {
-  return apiRequest<{ imported: number }>('/api/v1/admin/attendance/roster', {
-    method: 'POST', body: { rows, sourceReference, verified },
-  });
-}
-
 /** Corrects an attendance record. The reason is mandatory. */
 export async function correctAttendance(
   recordId: string,

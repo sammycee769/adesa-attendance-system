@@ -48,7 +48,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * transactional correction with its audit trail, the CSV export and the
  * restricted HR view of the audit log.
  */
-@SpringBootTest
+@SpringBootTest(properties = "attendance.reporting.weekday-policy-from=2026-11-01")
 @AutoConfigureMockMvc
 @Testcontainers
 class AdminAttendanceApiTest {
@@ -439,7 +439,7 @@ class AdminAttendanceApiTest {
                 .andExpect(jsonPath("$.days[3].employees[?(@.status == 'ON_APPROVED_LEAVE')]").isNotEmpty())
                 .andExpect(jsonPath("$.days[3].employees[?(@.status == 'NOT_SCHEDULED')]").isNotEmpty());
 
-        mockMvc.perform(get(url).param("date",today.toString()).param("status",remoteDay ? "REMOTE_WORK" : "NOT_YET_SIGNED_IN").with(authentication(asHr())))
+        mockMvc.perform(get(url).param("date",today.toString()).param("status",remoteDay ? "REMOTE_WORK" : "NOT_YET_SIGNED_IN").param("search","DAY-04").with(authentication(asHr())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.days[0].employees[0].employeeNumber").value("DAY-04"));
         mockMvc.perform(get(url).param("from",history.toString()).param("to",history.plusDays(6).toString())
                         .param("search","Roster").param("page","1").param("size","1").with(authentication(asHr())))
@@ -497,6 +497,35 @@ class AdminAttendanceApiTest {
                 .doesNotContain("IMPORT-002");
         assertThat(jdbcTemplate.queryForObject("select count(*) from attendance_records where attendance_date='2026-02-02'",Integer.class)).isZero();
         assertThat(jdbcTemplate.queryForObject("select count(*) from audit_logs where action='ATTENDANCE_ROSTER_IMPORTED'",Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void defaultWeekdayPolicyIncludesMissingPunchesInNormalExports() throws Exception {
+        UUID active = createEmployee("WEEK-001","Standard Weekday Staff","standard-weekday@adesa.test",EmployeeRole.EMPLOYEE);
+        UUID inactive = createEmployee("WEEK-002","Standard Weekday Former","standard-weekday-former@adesa.test",EmployeeRole.EMPLOYEE);
+        jdbcTemplate.update("update employees set created_at='2026-11-18T00:00:00Z' where id in (?,?)",active,inactive);
+        jdbcTemplate.update("update employees set is_active=false where id=?",inactive);
+        roster(active,null,LocalDate.of(2026,11,19),"APPROVED_LEAVE",LocalDate.of(2026,11,18),null);
+        String route = "/api/v1/admin/attendance";
+        mockMvc.perform(get(route + "/days").param("from","2026-11-16").param("to","2026-11-24")
+                        .param("search","Standard Weekday").with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalDays").value(5))
+                .andExpect(jsonPath("$.days[0].date").value("2026-11-24"))
+                .andExpect(jsonPath("$.days[0].employees[0].status").value("REMOTE_WORK"))
+                .andExpect(jsonPath("$.days[1].employees[0].status").value("ABSENT"))
+                .andExpect(jsonPath("$.days[2].employees[0].status").value("ABSENT"))
+                .andExpect(jsonPath("$.days[3].employees[0].status").value("ON_APPROVED_LEAVE"))
+                .andExpect(jsonPath("$.days[4].employees[0].status").value("ABSENT"))
+                .andExpect(jsonPath("$.summary.absent").value(3));
+        var csv = mockMvc.perform(get(route + "/export.csv").param("from","2026-11-16").param("to","2026-11-24")
+                        .param("search","Standard Weekday").with(authentication(asAdmin())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csv).contains("Cumulative attendance by employee",
+                "\"WEEK-001\",\"Standard Weekday Staff\",\"0\",\"3\",\"3\"").doesNotContain("WEEK-002");
+        mockMvc.perform(get(route + "/days").param("from","2026-11-16").param("to","2026-11-24")
+                        .param("search","Standard Weekday").param("status","REMOTE_WORK").with(authentication(asHr())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days.length()").value(1))
+                .andExpect(jsonPath("$.days[0].employees[0].expectedOfficeDays").value(3));
     }
 
     private void roster(UUID employee, UUID subsidiary, LocalDate date, String arrangement, LocalDate start, LocalDate end) {

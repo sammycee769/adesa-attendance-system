@@ -28,7 +28,7 @@ public record DailyAttendanceReport(LocalDate from, LocalDate to, Instant genera
 
     public record Row(UUID recordId, UUID employeeId, String employeeNumber, String employeeName,
             String subsidiary, String department, Instant signInAt, Instant signOutAt, Long workedMinutes,
-            Status status, String remarks, boolean expected, boolean late, boolean corrected) {}
+            Status status, String remarks, boolean expected, boolean late, boolean corrected, int expectedOfficeDays) {}
 
     public record Summary(int workingDays, int expected, int present, int absent, int late,
             int signedOut, int yetToSignOut, int incomplete, int approvedAbsences, int expectedPresent) {

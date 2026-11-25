@@ -20,7 +20,7 @@ final class AttendanceReportLayout {
             "Department", "Sign in", "Sign out", "Hours worked", "Attendance status", "Remarks");
 
     static final List<String> EMPLOYEE_TOTAL_COLUMNS =
-            List.of("Employee number","Employee name","Days present","Days absent");
+            List.of("Employee number","Employee name","Days present","Days absent","Expected office days");
     static final String EMPLOYEE_TOTAL_HEADING = "Cumulative attendance by employee";
 
     private AttendanceReportLayout() {}
@@ -49,13 +49,14 @@ final class AttendanceReportLayout {
             Row latest = rows.getFirst();
             return new EmployeeTotal(entry.getKey(),show(latest.employeeNumber()),show(latest.employeeName()),
                     rows.stream().filter(row -> row.signInAt() != null).count(),
-                    rows.stream().filter(row -> row.status() == Status.ABSENT).count());
+                    rows.stream().filter(row -> row.status() == Status.ABSENT).count(),
+                    latest.expectedOfficeDays());
         }).sorted(Comparator.comparing(EmployeeTotal::name,String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(EmployeeTotal::number).thenComparing(EmployeeTotal::id)).toList();
     }
 
-    record EmployeeTotal(UUID id, String number, String name, long present, long absent) {
-        List<String> cells() { return List.of(number,name,Long.toString(present),Long.toString(absent)); }
+    record EmployeeTotal(UUID id, String number, String name, long present, long absent, long officeDays) {
+        List<String> cells() { return List.of(number,name,Long.toString(present),Long.toString(absent),Long.toString(officeDays)); }
     }
 
     private static Metric metric(String name, int value) { return new Metric(name,Integer.toString(value)); }

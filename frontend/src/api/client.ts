@@ -266,7 +266,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 export interface DownloadOptions {
-  contentType?: 'application/pdf' | 'text/csv' | 'text/tab-separated-values' | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  contentType?: 'application/pdf' | 'text/csv' | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   params?: Record<string, QueryValue>;
   signal?: AbortSignal;
   /** Deadline for the whole call. Defaults to {@link DEFAULT_TIMEOUT_MS}. */

@@ -16,7 +16,7 @@ class AttendanceCsvWriterTest {
 
     private static DailyAttendanceReport report(String name) {
         var row = new Row(null,UUID.randomUUID(),"EMP-001",name,"ADESA","Operations",
-                null,null,null,Status.ABSENT,"",true,false,false);
+                null,null,null,Status.ABSENT,"",true,false,false,1);
         var rows = List.of(row);
         var days = List.of(new Day(DATE,rows,Summary.day(rows)));
         return new DailyAttendanceReport(DATE,DATE,Instant.EPOCH,"Africa/Lagos",0,1,days,Summary.of(days));
