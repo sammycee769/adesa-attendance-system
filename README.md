@@ -776,10 +776,9 @@ and its column names as the source of record during review.
 - In **Workbook imports**, choose the existing .xlsx. The app stages it and
   opens guided setup for the first board. Known information is filled in.
   Resolve conflicting expiry dates and confirm the two contract periods.
-  Choose whether to record an obligation on each side. An obligation requires
-  a verified amount, payment reference, and due date. Confirmation creates or
-  links the board, confirms the agreements and adds any verified obligations
-  in one transaction. The Reminders view then calculates the applicable dates.
+  Mark **Client invoice sent** when applicable. Confirmation creates or links the
+  board and confirms both agreements in one transaction. The Reminders view
+  then calculates the applicable dates.
   Choose **Finish later** to leave the other rows staged.
   Excel types, formats, cached values and formulas remain in the source snapshot.
   The original bytes are retained and formulas are never evaluated.
@@ -792,11 +791,11 @@ and its column names as the source of record during review.
 - Create renewals as new contract periods. Confirmed periods stay in history.
   Contracted profitability compares only confirmed vendor and client periods
   with exactly matching coverage. The reports show recorded cash separately.
-- Record obligations and partial payments in **Payments**. Provide the SLA
-  document URL when recording or correcting a payment. Corrections also
-  require a reason. A correction records a reversal and a replacement in one
-  transaction. Reversal entries remain visible and outstanding balances are
-  computed from the ledger. An imported status note cannot create a payment.
+- Open **Payments** on a board to see the client amount, vendor cost, recorded
+  payments and remaining balances by agreement period. Only the client side
+  has an invoice checkbox. Record payments against the applicable agreement
+  and provide the SLA document URL. Corrections require a reason and record a
+  reversal and replacement together. The ledger retains older payment entries.
 - Archive through the record actions and acknowledge dependent history if
   present. Permanent deletion is limited to archived records without financial,
   renewal or import history. The ledger, protected financial records, source
@@ -807,8 +806,9 @@ and its column names as the source of record during review.
 
 ### Local configuration and release preflight
 
-Flyway V12 to V18 add the private schema, source and review snapshots, register
-and ledger, reminder outbox, and payment SLA links. Apply them to a disposable PostgreSQL instance
+Flyway V12 to V19 add the private schema, source and review snapshots, register
+and ledger, reminder outbox, payment SLA links, and agreement-based payments.
+Apply them to a disposable PostgreSQL instance
 first. Keep `media_private` outside Supabase’s exposed API schemas. The Flyway
 principal needs schema creation rights. Never grant the application login
 ownership of the schema or direct access to its relations.
@@ -869,7 +869,8 @@ worker. Insert those verified addresses in `media_private.reminder_recipients`
 against the corresponding membership records. Delivery is gated on all three
 active emails matching the verified values. External vendor and client records
 supply reminder context only. The worker uses Africa/Lagos dates and exact
-reminder stages. Superseded contracts and settled items lose eligibility.
+reminder stages for each client and vendor agreement, 30 and 7 days before expiry.
+Superseded contracts lose eligibility.
 Unprocessed stages from prior dates are cancelled. An uncertain provider
 outcome is kept in history for review before any manual resend.
 

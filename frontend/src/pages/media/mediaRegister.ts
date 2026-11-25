@@ -16,7 +16,7 @@ export type Register = {
   transactions: MediaRow[];
   audit: MediaRow[];
 };
-export type Entity = 'party' | 'board' | 'contract' | 'obligation' | 'payment';
+export type Entity = 'party' | 'board' | 'contract' | 'payment';
 export type Option = { value: string; label: string };
 
 export const text = (row: MediaRow | undefined, key: string, fallback = ''): string => {
@@ -45,9 +45,8 @@ export function contractStatus(row: MediaRow, today: string) {
   return text(row, 'end_date') <= soon.toISOString().slice(0, 10) ? 'EXPIRING' : 'ACTIVE';
 }
 
-export function paymentStatus(row: MediaRow, today: string) {
-  if (Number(row.balance) === 0) return 'PAID';
-  if (text(row, 'due_date') && text(row, 'due_date') < today) return 'OVERDUE';
-  if (Number(row.paid) > 0) return 'PARTIALLY_PAID';
-  return row.invoice_sent ? 'INVOICE_SENT' : 'AWAITING_PAYMENT';
+export function paymentStatus(agreement: MediaRow) {
+  if (Number(agreement.balance) === 0) return 'PAID';
+  if (agreement.kind === 'CLIENT') return 'AWAITING_BALANCE';
+  return Number(agreement.paid) > 0 ? 'PART_PAYMENT' : 'OWING';
 }

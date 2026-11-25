@@ -38,7 +38,7 @@ function Table({ headers, rows, empty }: { headers: string[]; rows: ReactNode[][
 function StatusPill({ value }: { value: string }) {
   const key = value.toUpperCase().replaceAll(' ', '_');
   const positive = ['RUNNING', 'COMPLETED', 'ACTIVE', 'PAID', 'SENT', 'LOCAL_CAPTURED'];
-  const attention = ['WORK_IN_PROGRESS', 'EXPIRING', 'PARTIALLY_PAID', 'AWAITING_PAYMENT', 'RETRY', 'PENDING'];
+  const attention = ['WORK_IN_PROGRESS', 'EXPIRING', 'PART_PAYMENT', 'AWAITING_BALANCE', 'OWING', 'RETRY', 'PENDING'];
   const critical = ['EXPIRED', 'OVERDUE', 'FAILED'];
   const tone = positive.includes(key) ? 'positive' : attention.includes(key) ? 'attention'
     : critical.includes(key) ? 'critical' : 'neutral';
@@ -189,11 +189,10 @@ export function MediaWorkspace() {
     && [item.location, item.client, item.vendor].some(value => value.toLowerCase().includes(query.trim().toLowerCase())));
   const contracts = register?.contracts.filter(c => visible(c) && matchesBoard(board(c.board_id))
     && matchesStatus(contractStatus(c,today)) && inDates(text(c,'end_date'))) ?? [];
-  const obligations = register?.obligations.filter(o => {
-    const c = contract(o.contract_id);
-    return visible(o) && visible(c) && matchesBoard(board(c?.board_id)) && matchesStatus(paymentStatus(o,today)) && inDates(text(o,'due_date'));
-  }) ?? [];
-  const obligationIds = new Set(obligations.map(o => o.id));
+  const paymentAgreements = register?.contracts.filter(c => c.confirmed && visible(c) && matchesBoard(board(c.board_id))
+    && matchesStatus(paymentStatus(c)) && inDates(text(c,'end_date'))) ?? [];
+  const agreementIds = new Set(paymentAgreements.map(c => c.id));
+  const transactionAgreement = (t: MediaRow) => contract(t.contract_id ?? obligation(t.obligation_id)?.contract_id);
   const reversed = new Set(register?.transactions.filter(t => Boolean(t.reversal_of)).map(t => t.reversal_of));
   const boardName = (id: unknown) => text(board(id), 'code', 'Unknown board');
   const canArchive = register?.category === 'ADMIN' || register?.category === 'BUSINESS_MANAGER' || register?.category === 'COO';
@@ -239,7 +238,7 @@ export function MediaWorkspace() {
   </div>;
 
   const activeContracts = contracts.filter(c => ['ACTIVE','EXPIRING'].includes(contractStatus(c,today)));
-  const openObligations = obligations.filter(o => Number(o.balance)>0);
+  const openAgreements = paymentAgreements.filter(c => Number(c.balance)>0);
 
   return <div className="media-workspace">
     <header className="media-hero">
@@ -273,16 +272,16 @@ export function MediaWorkspace() {
                 <option key={p.id} value={p.id}>{text(p,'name')}</option>)}
             </select></label>)}
           {['contracts','payments','reports'].includes(section) && <>
-            <label>From date<input type="date" value={from} onChange={e => { setFrom(e.target.value); setReport(undefined); }} /></label>
-            <label>To date<input type="date" value={to} onChange={e => { setTo(e.target.value); setReport(undefined); }} /></label>
+            <label>{section === 'payments' ? 'Expiry from' : 'From date'}<input type="date" value={from} onChange={e => { setFrom(e.target.value); setReport(undefined); }} /></label>
+            <label>{section === 'payments' ? 'Expiry through' : 'To date'}<input type="date" value={to} onChange={e => { setTo(e.target.value); setReport(undefined); }} /></label>
           </>}
           {['boards','contracts','payments','reports'].includes(section) && <label>Status
             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setReport(undefined); }}><option value="">All</option>
               {(section === 'boards' ? ['RUNNING','WORK_IN_PROGRESS','COMPLETED'] :
                 section === 'contracts' ? ['ACTIVE','UPCOMING','EXPIRING','EXPIRED','RENEWED','DRAFT','ARCHIVED'] :
-                section === 'payments' ? ['AWAITING_PAYMENT','INVOICE_SENT','PARTIALLY_PAID','PAID','OVERDUE'] :
+                section === 'payments' ? ['AWAITING_BALANCE','OWING','PART_PAYMENT','PAID'] :
                 ['RUNNING','WORK_IN_PROGRESS','COMPLETED','ACTIVE','UPCOMING','EXPIRING','EXPIRED','RENEWED','DRAFT','ARCHIVED',
-                  'AWAITING_PAYMENT','INVOICE_SENT','PARTIALLY_PAID','PAID','OVERDUE','PAYMENT','REVERSAL','CORRECTION',
+                  'AWAITING_BALANCE','OWING','PART_PAYMENT','PAID','PAYMENT','REVERSAL','CORRECTION',
                   'PENDING','RETRY','SENT','LOCAL_CAPTURED','FAILED','CANCELLED','UNKNOWN']).map(state =>
                 <option key={state} value={state}>{label(state)}</option>)}
             </select>
@@ -291,7 +290,7 @@ export function MediaWorkspace() {
         </div>
       </section>}
 
-      {edit && <MediaRecordEditor key={`${edit.entity}:${edit.row?.id}:${edit.action}:${edit.renew}:${edit.kind}`}
+      {edit && <MediaRecordEditor key={`${edit.entity}:${edit.row?.id}:${edit.action}:${edit.renew}:${edit.kind}:${edit.agreement?.id}`}
         edit={edit} register={register} busy={busy} cancel={() => setEdit(undefined)} save={mutate} />}
       {lifecycle && <form ref={lifecycleEditor} className="card media-editor reveal-editor" onSubmit={submitLifecycle}>
         <h2>{label(lifecycle.action)} {lifecycle.entity}</h2>
@@ -316,8 +315,8 @@ export function MediaWorkspace() {
             ['Active contracts',activeContracts.length], ['Expiring contracts',contracts.filter(c=>contractStatus(c,today)==='EXPIRING').length],
             ['Expired contracts',contracts.filter(c=>contractStatus(c,today)==='EXPIRED').length],
             ['Renewal periods',contracts.filter(c=>Boolean(c.renews_id)).length],
-            ['Open receivables',openObligations.filter(o=>contract(o.contract_id)?.kind==='CLIENT').length],
-            ['Open payables',openObligations.filter(o=>contract(o.contract_id)?.kind==='VENDOR').length],
+            ['Open receivables',openAgreements.filter(c=>c.kind==='CLIENT').length],
+            ['Open payables',openAgreements.filter(c=>c.kind==='VENDOR').length],
           ].map(([caption,value])=><div key={caption} data-featured={caption === 'Boards' || caption === 'Expiring contracts' || undefined}>
             <dt>{caption}</dt><dd>{value}</dd>
           </div>)}</dl>
@@ -334,11 +333,11 @@ export function MediaWorkspace() {
               <Link to={`?section=imports&row=${item.draft.row}`}>Review board</Link>,
             ])} empty="No workbook boards match the filters." />
         </section>}
-        <section className="card"><h2>Upcoming and overdue payments</h2>
-          <Table headers={['Reference','Board','Side','Due date','Balance','Status']}
-            rows={openObligations.slice(0,12).map(o=>[text(o,'reference'),boardName(contract(o.contract_id)?.board_id),
-              label(text(contract(o.contract_id),'kind')),text(o,'due_date','Needs confirmation'),currency(o,'balance'),<StatusPill value={paymentStatus(o,today)} />])}
-            empty="There are no open obligations in this view." />
+        <section className="card"><h2>Outstanding balances</h2>
+          <Table headers={['Board','Side','Agreement expiry','Remaining','Status']}
+            rows={openAgreements.slice(0,12).map(c=>[boardName(c.board_id),label(text(c,'kind')),
+              text(c,'end_date'),currency(c,'balance'),<StatusPill value={paymentStatus(c)} />])}
+            empty="There are no outstanding balances in this view." />
         </section>
         <section className="card"><h2>Profitability and cash</h2>
           <p>Gross profit compares confirmed vendor and client agreements for the same dates. Cash comes from recorded payments.</p>
@@ -359,7 +358,10 @@ export function MediaWorkspace() {
           rows={boards.map(b=>[
             <>{text(b,'code')}{b.archived_at && ' · Archived'}<br />{text(b,'description')}</>,text(b,'location'),text(party(b.vendor_id),'name','—'),
             text(party(b.client_id),'name','—'),register.managers.find(m=>m.id===b.manager_id)?.name??'—',
-            <StatusPill value={text(b,'status','UNCONFIRMED')} />,rowActions('board',b,actionButton('Contracts',()=>navigate('contracts',b.id)))])}
+            <StatusPill value={text(b,'status','UNCONFIRMED')} />,rowActions('board',b,<>
+              {actionButton('Contracts',()=>navigate('contracts',b.id))}
+              {actionButton('Payments',()=>navigate('payments',b.id))}
+            </>)])}
           empty="No registered boards match this view." />
         {importedBoards.length > 0 && <p><Link to="?section=overview">See boards from the workbook on the dashboard</Link></p>}
       </section>}
@@ -386,41 +388,50 @@ export function MediaWorkspace() {
       </section>}
 
       {section === 'payments' && <>
-        <section className="card"><h2>Payables and receivables</h2>
-          <div className="media-actions">
-            {actionButton('Add obligation',()=>setEdit({entity:'obligation'}),busy)}
-            {actionButton('Record payment',()=>setEdit({entity:'payment',action:'record'}),busy)}
-          </div>
-          <Table headers={['Reference','Board','Side','Due','Amount','Net paid','Outstanding','Invoice','Status','Actions']}
-            rows={obligations.map(o=>[text(o,'reference'),boardName(contract(o.contract_id)?.board_id),
-              label(text(contract(o.contract_id),'kind')),text(o,'due_date','Needs confirmation'),currency(o,'amount'),
-              currency(o,'paid'),currency(o,'balance'),o.invoice_sent?'Sent':'Unsent',<StatusPill value={paymentStatus(o,today)} />,rowActions('obligation',o)])}
-            empty="No obligations match this view."/>
-        </section>
+        {(['CLIENT','VENDOR'] as const).map(side => <section className="card" key={side}>
+          <h2>{side === 'CLIENT' ? 'Client payments' : 'Vendor payments'}</h2>
+          <Table headers={['Board','Agreement expiry',side === 'CLIENT' ? 'Client amount' : 'Vendor cost',
+            side === 'CLIENT' ? 'Received' : 'Paid','Remaining',
+            ...(side === 'CLIENT' ? ['Invoice sent'] : []),'Status','Actions']}
+            rows={paymentAgreements.filter(c => c.kind === side).map(c => {
+              const active = !c.archived_at && !board(c.board_id)?.archived_at;
+              return [boardName(c.board_id),text(c,'end_date'),currency(c,'amount'),currency(c,'paid'),currency(c,'balance'),
+                ...(side === 'CLIENT' ? [<input type="checkbox" checked={Boolean(c.invoice_sent)} disabled={busy || !active}
+                  aria-label={`Invoice sent for ${boardName(c.board_id)} ending ${text(c,'end_date')}`}
+                  onChange={event => void mutate('contract','invoice',{
+                    id:c.id, revision:c.invoice_revision, invoiceSent:event.target.checked,
+                  })} />] : []),
+                <StatusPill value={paymentStatus(c)} />,
+                active && Number(c.balance)>0 && actionButton('Record payment',
+                  ()=>setEdit({entity:'payment',action:'record',agreement:c}),busy)];
+            })}
+            empty={`No confirmed ${side.toLowerCase()} agreements match this view.`}/>
+        </section>)}
         <section className="card"><h2>Payment ledger</h2>
-          <Table headers={['Reference','Obligation','Date','Amount','Entry','SLA','Evidence or reason','Actions']}
-            rows={register.transactions.filter(t=>obligationIds.has(String(t.obligation_id))).map(t=>[
-              text(t,'reference'),text(obligation(t.obligation_id),'reference'),text(t,'paid_on'),currency(t,'amount'),
+          <Table headers={['Reference','Board and side','Date','Amount','Entry','SLA','Evidence or reason','Actions']}
+            rows={register.transactions.filter(t=>agreementIds.has(transactionAgreement(t)?.id ?? '')).map(t=>[
+              text(t,'reference'),`${boardName(transactionAgreement(t)?.board_id)} · ${label(text(transactionAgreement(t),'kind'))}`,text(t,'paid_on'),currency(t,'amount'),
               t.reversal_of?'Reversal':reversed.has(t.id)?'Reversed':t.replacement_for?'Replacement':'Payment',
               /^https?:\/\//i.test(text(t,'sla_link'))
                 ? <a href={text(t,'sla_link')} target="_blank" rel="noopener noreferrer">Open SLA</a> : '—',
               [text(t,'evidence'),text(t,'reason')].filter(Boolean).join(' · '),
-              !t.reversal_of && !reversed.has(t.id) && !obligation(t.obligation_id)?.archived_at && <div className="media-actions">
+              !t.reversal_of && !reversed.has(t.id) && !obligation(t.obligation_id)?.archived_at && !transactionAgreement(t)?.archived_at
+                && !board(transactionAgreement(t)?.board_id)?.archived_at && <div className="media-actions">
                 {actionButton('Correct',()=>setEdit({entity:'payment',row:t,action:'correct'}),busy)}
                 {actionButton('Reverse',()=>setEdit({entity:'payment',row:t,action:'reverse'}),busy)}
               </div>])}
-            empty="No payments have been recorded for these obligations."/>
+            empty="No payments have been recorded for these agreements."/>
         </section>
       </>}
 
       {section === 'reminders' && <>
         <section className="card"><h2>Upcoming reminders</h2>
-          <p>Contract reminders are due 30 and 7 days before expiry. Unpaid obligations are due 7 days before and on the due date.</p>
+          <p>Each confirmed client and vendor agreement has reminders 30 and 7 days before its own expiry.</p>
           <p>{plan?.verifiedRecipients ?? 0} of 3 internal recipients verified. Delivery requires an approved worker configuration.</p>
-          <Table headers={['Board','Reminder','Side','Expiry or due date','Reminder date','Days before']}
+          <Table headers={['Board','Reminder','Side','Expiry date','Reminder date','Days before']}
             rows={(plan?.upcoming ?? []).filter(item => !boardId || item.payload.boardId === boardId).map(item =>
               [item.payload.board,label(item.entity),label(item.payload.side),item.payload.date,item.reminder_day,item.stage])}
-            empty="No confirmed contracts or unpaid obligations have a reminder due in the next 30 days."/>
+            empty="No confirmed agreements have an expiry reminder due in the next 30 days."/>
         </section>
         <section className="card"><h2>Reminder history</h2>
           <Table headers={['Board','Reminder','Internal recipient','Scheduled date','Days before','Status','Attempts']}
@@ -434,7 +445,7 @@ export function MediaWorkspace() {
 
       {section === 'reports' && <section className="card"><h2>Reports</h2>
         <label>Report{' '}<select value={reportKind} onChange={e=>{setReportKind(e.target.value);setReport(undefined);}}>
-          {['BOARDS','CONTRACTS','EXPIRIES','RENEWALS','OBLIGATIONS','PAYMENTS','BALANCES','PROFITABILITY','REMINDERS'].map(kind=>
+          {['BOARDS','CONTRACTS','EXPIRIES','RENEWALS','PAYMENTS','BALANCES','PROFITABILITY','REMINDERS'].map(kind=>
             <option key={kind} value={kind}>{label(kind)}</option>)}
         </select></label>
         {reportKind==='PROFITABILITY' && <p>Gross profit compares confirmed periods with matching start and expiry dates. Cash totals come from the ledger.</p>}

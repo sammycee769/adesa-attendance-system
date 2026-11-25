@@ -157,8 +157,16 @@ class MediaImportIntegrationTest {
         UUID clientContract = confirm(board,"CLIENT",client,operator,start,end,150);
         save("contract",operator,"EMPLOYEE",Map.of("boardId",board,"kind","CLIENT","partyId",client,
                 "startDate",start,"endDate",end.plusDays(1),"amount","150","confirmed",true)).andExpect(status().isConflict());
-        UUID obligation = id(save("obligation",operator,"EMPLOYEE",Map.of("contractId",clientContract,"reference","INV-1",
-                "amount","150.00","invoiceSent",true,"dueDate",day.plusDays(7))));
+        UUID obligation = owner.queryForObject("""
+                insert into media_private.obligations(contract_id,reference,amount,invoice_sent,due_date)
+                values (?,'INV-1',150,true,?) returning id
+                """, UUID.class, clientContract, day.plusDays(7));
+        command("contract","invoice",operator,"EMPLOYEE",Map.of("id",clientContract,"revision",1,"invoiceSent",true))
+                .andExpect(status().isOk());
+        command("contract","invoice",operator,"EMPLOYEE",Map.of("id",clientContract,"revision",1,"invoiceSent",false))
+                .andExpect(status().isConflict());
+        command("contract","invoice",operator,"EMPLOYEE",Map.of("id",vendorContract,"revision",1,"invoiceSent",true))
+                .andExpect(status().isBadRequest());
         command("payment","record",operator,"EMPLOYEE",
                 Map.of("obligationId",obligation,"amount","45.20","paidOn",day,"reference","receipt-1"))
                 .andExpect(status().isBadRequest());
@@ -167,9 +175,9 @@ class MediaImportIntegrationTest {
                 .andExpect(status().isBadRequest());
         UUID payment = id(command("payment","record",operator,"EMPLOYEE",
                 Map.of("obligationId",obligation,"amount","45.20","paidOn",day,"reference","receipt-1","slaLink","https://example.com/sla")));
-        command("payment","record",operator,"EMPLOYEE",Map.of("obligationId",obligation,"amount","105","paidOn",day,"reference","too-large","slaLink","https://example.com/sla"))
+        command("payment","record",operator,"EMPLOYEE",Map.of("contractId",clientContract,"amount","105","paidOn",day,"reference","too-large","slaLink","https://example.com/sla"))
                 .andExpect(status().isBadRequest());
-        command("payment","record",operator,"EMPLOYEE",Map.of("obligationId",obligation,"amount","1","paidOn",day,"reference","receipt-1","slaLink","https://example.com/sla"))
+        command("payment","record",operator,"EMPLOYEE",Map.of("contractId",clientContract,"amount","1","paidOn",day,"reference","receipt-1","slaLink","https://example.com/sla"))
                 .andExpect(status().isConflict());
         UUID corrected = id(command("payment","correct",operator,"EMPLOYEE",Map.of("id",payment,"amount","40.10",
                 "paidOn",day,"reference","receipt-1","reason","Correct transfer amount","slaLink","https://example.com/sla")));
@@ -202,7 +210,7 @@ class MediaImportIntegrationTest {
             var first = jobs.submit(() -> worker.queryForObject("select media_private.prepare_reminders(?)",Integer.class,day));
             var second = jobs.submit(() -> worker.queryForObject("select media_private.prepare_reminders(?)",Integer.class,day));
             assertThat(List.of(first.get(10,java.util.concurrent.TimeUnit.SECONDS),second.get(10,java.util.concurrent.TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder(0,9);
+                    .containsExactlyInAnyOrder(0,6);
         } finally {
             jobs.shutdownNow();
         }
@@ -215,7 +223,12 @@ class MediaImportIntegrationTest {
         assertThat(owner.queryForObject("select count(*) from media_private.reminder_attempts where status='LOCAL_CAPTURED'",Long.class)).isEqualTo(1);
         id(save("contract",operator,"EMPLOYEE",Map.of("boardId",board,"kind","VENDOR","partyId",vendor,
                 "startDate",end.plusDays(1),"endDate",end.plusDays(90),"amount",110,"confirmed",true,"renewsId",vendorContract)));
-        id(command("payment","record",operator,"EMPLOYEE",Map.of("obligationId",obligation,"amount","150","paidOn",day,"reference","receipt-full","slaLink","https://example.com/sla")));
+        id(command("payment","record",operator,"EMPLOYEE",Map.of("contractId",clientContract,"amount","150","paidOn",day,"reference","receipt-full","slaLink","https://example.com/sla")));
+        assertThat(owner.queryForObject("select media_private.contract_net_paid(?)",java.math.BigDecimal.class,clientContract))
+                .isEqualByComparingTo("150");
+        mvc.perform(get(ROOT + "/reports/BALANCES/preview").param("board",board.toString()).with(as(operator,"EMPLOYEE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows[?(@[1] == 'CLIENT')]").isEmpty());
         worker.queryForObject("select media_private.prepare_reminders(?)",Integer.class,day);
         assertThat(owner.queryForObject("select count(*) from media_private.reminders where status='PENDING' and entity_id in (?,?)",Long.class,vendorContract,obligation)).isZero();
         assertThat(owner.queryForObject("select count(*) from media_private.reminder_candidates(?) where stage=7 and entity_id=?",Long.class,end.minusDays(7),clientContract)).isEqualTo(1);
@@ -269,15 +282,15 @@ class MediaImportIntegrationTest {
     private void verifyGuidedCompletion(UUID batch, UUID operator, UUID staff, LocalDate day) throws Exception {
         String path = ROOT + "/imports/" + batch + "/complete/3";
         Map<String, Object> vendor = Map.of("name","Guided Vendor","startDate",day,"endDate",day.plusDays(30),
-                "amount","100.00","createObligation",true,"obligationAmount","85.00","dueDate",day.plusDays(7),"reference","GUIDE-V");
-        Map<String, Object> client = Map.of("name","Guided Client","startDate",day,"endDate",day.plusDays(30),
-                "amount","175.00","createObligation",false);
+                "amount","100.00");
+        Map<String, Object> client = Map.of("name","Guided Client","startDate",day,"endDate",day.plusDays(7),
+                "amount","175.00","invoiceSent",true);
         var data = new java.util.HashMap<String,Object>(Map.of("revision",0,"confirmed",true,"location","Guided place",
                 "vendor",vendor,"client",client));
         mvc.perform(post(path).with(as(staff,"EMPLOYEE")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(data))).andExpect(status().isForbidden());
         var missing = new java.util.HashMap<>(vendor);
-        missing.remove("dueDate");
+        missing.remove("endDate");
         data.put("vendor",missing);
         mvc.perform(post(path).with(as(operator,"EMPLOYEE")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(data))).andExpect(status().isBadRequest());
@@ -287,10 +300,27 @@ class MediaImportIntegrationTest {
         UUID board = id(mvc.perform(post(path).with(as(operator,"EMPLOYEE")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(data))));
         assertThat(owner.queryForObject("select count(*) from media_private.contracts where board_id=? and confirmed",Long.class,board)).isEqualTo(2);
-        assertThat(owner.queryForObject("select count(*) from media_private.obligations o join media_private.contracts c on c.id=o.contract_id where c.board_id=?",Long.class,board)).isEqualTo(1);
-        assertThat(owner.queryForObject("select count(*) from media_private.reminder_candidates(?) where payload->>'boardId'=?",Long.class,day,board.toString())).isEqualTo(3);
+        assertThat(owner.queryForObject("select count(*) from media_private.obligations o join media_private.contracts c on c.id=o.contract_id where c.board_id=?",Long.class,board)).isZero();
+        assertThat(owner.queryForObject("select count(*) from media_private.reminder_candidates(?) where payload->>'boardId'=?",Long.class,day,board.toString())).isEqualTo(2);
+        assertThat(owner.queryForList("select stage from media_private.reminder_candidates(?) where payload->>'boardId'=?",Integer.class,day,board.toString()))
+                .containsExactlyInAnyOrder(30,7);
+        assertThat(owner.queryForObject("select invoice_sent from media_private.contracts where board_id=? and kind='CLIENT'",Boolean.class,board))
+                .isTrue();
         mvc.perform(get(ROOT + "/reminders/plan").with(as(operator,"EMPLOYEE"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.upcoming[?(@.payload.boardId == '" + board + "')]").isNotEmpty());
+        UUID vendorAgreement = owner.queryForObject("select id from media_private.contracts where board_id=? and kind='VENDOR'",UUID.class,board);
+        UUID paid = id(command("payment","record",operator,"EMPLOYEE",Map.of("contractId",vendorAgreement,"amount","25",
+                "paidOn",day,"reference","vendor-receipt","slaLink","https://example.com/sla")));
+        assertThat(owner.queryForObject("select media_private.contract_net_paid(?)",java.math.BigDecimal.class,vendorAgreement))
+                .isEqualByComparingTo("25");
+        UUID replacement = id(command("payment","correct",operator,"EMPLOYEE",Map.of("id",paid,"amount","30","paidOn",day,
+                "reference","vendor-receipt","reason","Correct amount","slaLink","https://example.com/sla")));
+        assertThat(owner.queryForObject("select media_private.contract_net_paid(?)",java.math.BigDecimal.class,vendorAgreement))
+                .isEqualByComparingTo("30");
+        command("payment","reverse",operator,"EMPLOYEE",Map.of("id",replacement,"reason","Payment returned"))
+                .andExpect(status().isOk());
+        assertThat(owner.queryForObject("select media_private.contract_net_paid(?)",java.math.BigDecimal.class,vendorAgreement))
+                .isEqualByComparingTo("0");
     }
 
     private UUID confirm(UUID board, String side, UUID counterparty, UUID actor, LocalDate start, LocalDate end, int amount) throws Exception {

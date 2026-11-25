@@ -85,7 +85,7 @@ it('saves a selected vendor expiry against the staged row without changing the o
   expect(screen.getByText('2026-12-10')).toBeInTheDocument();
 });
 
-it('starts guided setup on upload and asks for a payment due date only when an obligation is selected', async () => {
+it('starts guided setup with separate expiry dates and a client invoice checkbox', async () => {
   const staged = { id: 'batch', inserted: 1, updated: 0, skipped: 0, flagged: 1 };
   request.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path.endsWith('/access')) return { allowed: true, category: 'OPERATOR' };
@@ -102,10 +102,10 @@ it('starts guided setup on upload and asks for a payment due date only when an o
   expect(await screen.findByRole('form', { name: 'Complete workbook board' })).toBeInTheDocument();
   expect(screen.getByLabelText('Board location')).toHaveValue('Ring Road');
   expect(screen.getByText(/Workbook status note: PAID/)).toBeInTheDocument();
-  expect(screen.queryByLabelText('Vendor payment due date')).not.toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText('Vendor payment obligation'), 'true');
-  expect(screen.getByLabelText('Vendor payment due date')).toBeRequired();
-  expect(screen.getByLabelText('Vendor amount due (NGN)')).toBeRequired();
+  expect(screen.getByLabelText('Vendor expiry')).toBeRequired();
+  expect(screen.getByLabelText('Client expiry')).toBeRequired();
+  expect(screen.getByLabelText('Client invoice sent')).not.toBeChecked();
+  expect(screen.queryByLabelText(/payment obligation|payment due date/i)).not.toBeInTheDocument();
 });
 
 it('resumes a workbook staged before guided setup and skips boards already linked', async () => {

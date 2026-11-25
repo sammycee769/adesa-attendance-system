@@ -46,8 +46,8 @@ class MediaReports {
         List<String> headers = switch (report) {
             case BOARDS -> labels("Board","Description","Location","Vendor","Client","Job status","Archived");
             case CONTRACTS, EXPIRIES, RENEWALS -> labels("Board","Side","Counterparty","Start","Expiry","NGN","Lifecycle","Renewed from");
-            case OBLIGATIONS, BALANCES -> labels("Board","Side","Reference","Due","Amount NGN","Paid NGN","Balance NGN","Invoice","Payment status");
-            case PAYMENTS -> labels("Board","Side","Obligation","Reference","Paid date","Entry","NGN","Reason","Evidence");
+            case OBLIGATIONS, BALANCES -> labels("Board","Side","Expiry","Amount NGN","Paid NGN","Balance NGN","Invoice","Payment status");
+            case PAYMENTS -> labels("Board","Side","Agreement expiry","Reference","Paid date","Entry","NGN","SLA","Reason","Evidence");
             case PROFITABILITY -> labels("Board","Start","End","Vendor NGN","Client NGN","Gross profit NGN","Margin %","Cash in NGN","Cash out NGN");
             case REMINDERS -> labels("Board","Reminder","Side","Reference date","Reminder date","Stage days before","Outcome","Attempts");
         };
@@ -72,25 +72,27 @@ class MediaReports {
                 }
             }
             case OBLIGATIONS, BALANCES -> {
-                for (var o : register.path("obligations")) {
-                    var c = find(contracts,o,"contract_id");
+                for (var c : register.path("contracts")) {
                     var b = find(boards,c,"board_id");
-                    String state = paymentState(o,day);
-                    if (!eligible(b,filter) || !visible(c,filter) || !visible(o,filter)
-                            || !dateRange(o,"due_date",filter) || !statusMatches(filter,state)
-                            || report==Report.BALANCES && money(o,"balance").signum()==0) continue;
-                    rows.add(labels(text(b,"code"),text(c,"kind"),text(o,"reference"),text(o,"due_date"),
-                            text(o,"amount"),text(o,"paid"),text(o,"balance"),
-                            o.path("invoice_sent").asBoolean() ? "INVOICE_SENT" : "UNSENT",state));
+                    String state = paymentState(c);
+                    if (!eligible(b,filter) || !visible(c,filter) || !c.path("confirmed").asBoolean()
+                            || !dateRange(c,"end_date",filter) || !statusMatches(filter,state)
+                            || report==Report.BALANCES && money(c,"balance").signum()==0) continue;
+                    String invoice = !"CLIENT".equals(text(c,"kind")) ? ""
+                            : c.path("invoice_sent").asBoolean() ? "SENT" : "UNSENT";
+                    rows.add(labels(text(b,"code"),text(c,"kind"),text(c,"end_date"),
+                            text(c,"amount"),text(c,"paid"),text(c,"balance"),invoice,state));
                 }
             }
             case PAYMENTS -> {
                 for (var t : register.path("transactions")) {
-                    var o=find(obligations,t,"obligation_id"); var c=find(contracts,o,"contract_id"); var b=find(boards,c,"board_id");
+                    var legacy = find(obligations,t,"obligation_id");
+                    var c = text(t,"contract_id").isBlank() ? find(contracts,legacy,"contract_id") : find(contracts,t,"contract_id");
+                    var b = find(boards,c,"board_id");
                     String kind = !text(t,"reversal_of").isBlank() ? "REVERSAL" : !text(t,"replacement_for").isBlank() ? "CORRECTION" : "PAYMENT";
-                    if (!eligible(b,filter) || !visible(c,filter) || !visible(o,filter) || !dateRange(t,"paid_on",filter) || !statusMatches(filter,kind)) continue;
-                    rows.add(labels(text(b,"code"),text(c,"kind"),text(o,"reference"),text(t,"reference"),
-                            text(t,"paid_on"),kind,text(t,"amount"),text(t,"reason"),text(t,"evidence")));
+                    if (!eligible(b,filter) || !visible(c,filter) || !dateRange(t,"paid_on",filter) || !statusMatches(filter,kind)) continue;
+                    rows.add(labels(text(b,"code"),text(c,"kind"),text(c,"end_date"),text(t,"reference"),
+                            text(t,"paid_on"),kind,text(t,"amount"),text(t,"sla_link"),text(t,"reason"),text(t,"evidence")));
                 }
             }
             case PROFITABILITY -> {
@@ -108,8 +110,8 @@ class MediaReports {
                         String margin = revenue.signum() == 0 ? "" : profit.multiply(BigDecimal.valueOf(100))
                                 .divide(revenue,2,RoundingMode.HALF_UP).toPlainString();
                         rows.add(labels(text(b,"code"),text(client,"start_date"),text(client,"end_date"),formatMoney(cost),
-                                formatMoney(revenue),formatMoney(profit),margin,formatMoney(cash(register,client)),
-                                formatMoney(cash(register,vendor))));
+                                formatMoney(revenue),formatMoney(profit),margin,formatMoney(money(client,"paid")),
+                                formatMoney(money(vendor,"paid"))));
                     }
                 }
             }
@@ -173,11 +175,10 @@ class MediaReports {
         return !expires.isAfter(day.plusDays(30)) ? "EXPIRING" : "ACTIVE";
     }
 
-    static String paymentState(JsonNode o, LocalDate day) {
-        if (money(o,"balance").signum()==0) return "PAID";
-        if (!text(o,"due_date").isBlank() && LocalDate.parse(text(o,"due_date")).isBefore(day)) return "OVERDUE";
-        if (money(o,"paid").signum()>0) return "PARTIALLY_PAID";
-        return o.path("invoice_sent").asBoolean() ? "INVOICE_SENT" : "AWAITING_PAYMENT";
+    static String paymentState(JsonNode agreement) {
+        if (money(agreement,"balance").signum()==0) return "PAID";
+        if ("CLIENT".equals(text(agreement,"kind"))) return "AWAITING_BALANCE";
+        return money(agreement,"paid").signum()>0 ? "PART_PAYMENT" : "OWING";
     }
 
     private static boolean eligible(JsonNode b, Filter f) {
@@ -205,13 +206,6 @@ class MediaReports {
     private static String text(JsonNode node,String key) { return node.path(key).asText(""); }
     private static BigDecimal money(JsonNode row,String key) {
         return row.path(key).isNumber() ? row.path(key).decimalValue() : BigDecimal.ZERO;
-    }
-    private static BigDecimal cash(JsonNode register,JsonNode contract) {
-        BigDecimal result=BigDecimal.ZERO;
-        for (var o : register.path("obligations")) {
-            if (text(contract,"id").equals(text(o,"contract_id"))) result=result.add(money(o,"paid"));
-        }
-        return result;
     }
     private static String formatMoney(BigDecimal value) { return value.setScale(2).toPlainString(); }
     private static List<String> labels(String... items) { return List.of(items); }

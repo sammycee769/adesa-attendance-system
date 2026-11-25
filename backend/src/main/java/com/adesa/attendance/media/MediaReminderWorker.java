@@ -62,25 +62,23 @@ class MediaReminderWorker {
     private String deliver(JsonNode item, LocalDate day) {
         var payload = item.path("payload");
         if (!payload.isObject() || !LocalDate.now(LAGOS).equals(day)) return "CANCELLED";
-        String heading = "CONTRACT".equals(item.path("entity").asText()) ? "Contract expiry" : "Payment due";
-        String title = "ADESA Media | " + heading;
+        String title = "ADESA Media | Contract expiry";
         String link = publicUrl + "/media/boards?board=" + payload.path("boardId").asText();
         String text = """
                 ADESA Media
-                %s
+                Contract expiry
                 Board: %s · %s
                 Vendor: %s
                 Client: %s
                 Contract side: %s
                 Start date: %s
-                Expiry or due date: %s
+                Expiry date: %s
                 Contract amount (NGN): %s
-                Outstanding balance (NGN): %s
 
                 View the board: %s
-                """.formatted(heading, field(payload,"board"), field(payload,"location"), field(payload,"vendor"),
+                """.formatted(field(payload,"board"), field(payload,"location"), field(payload,"vendor"),
                 field(payload,"client"), field(payload,"side"), field(payload,"start"), field(payload,"date"),
-                field(payload,"amount"), field(payload,"balance"), link);
+                field(payload,"amount"), link);
         try {
             mail.send(item.path("verified_email").asText(), title, text,
                     "<html><body><h2>ADESA Media</h2><p>" + HtmlUtils.htmlEscape(text).replace("\n", "<br>")
