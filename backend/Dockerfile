@@ -14,9 +14,11 @@ RUN mvn clean package -DskipTests -B
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-RUN useradd --system --no-create-home appuser
+RUN apt-get update && apt-get install -y --no-install-recommends fontconfig libfreetype6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --no-create-home appuser
 COPY --from=build /app/target/*.jar app.jar
 USER appuser
 
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "exec java -XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Dserver.port=${PORT:-8080} -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java -XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Djava.awt.headless=true -Dserver.port=${PORT:-8080} -jar app.jar"]

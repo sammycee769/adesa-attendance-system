@@ -1,3 +1,5 @@
+import { VendorPage } from './pages/vendor/VendorPage';
+import { EventsLeadPage } from './pages/campaign/EventsLeadPage';
 import { MediaWorkspace } from './pages/media/MediaWorkspace';
 import { RecurringPaymentsPage } from './pages/payments/RecurringPaymentsPage';
 import { AssetManagementPage } from './pages/assets/AssetPage';
@@ -43,6 +45,8 @@ export function App() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/vendors" element={<RequireRole roles={['ADMIN']}><VendorPage /></RequireRole>} />
+        <Route path="/events-leads" element={<EventsLeadPage />} />
         <Route path="/media/boards" element={<MediaWorkspace />} />
         <Route path="/assets" element={<AssetManagementPage />} />
         <Route path="/assets/:section" element={<AssetManagementPage />} />

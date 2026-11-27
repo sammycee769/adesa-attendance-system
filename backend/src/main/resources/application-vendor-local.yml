@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:55442/adesa_vendor_demo
+    username: vendor_app
+    password: vendor_demo_only
+server:
+  address: 127.0.0.1
+  port: 8088
+  servlet:
+    session:
+      cookie:
+        secure: false
+adesa:
+  account:
+    public-url: http://localhost:5180
+  mail:
+    provider: smtp
+    host: ""
+    username: ""
+    password: ""
+  assets:
+    mail:
+      enabled: false
+  payments:
+    transport: mock
+    live-approved: false
+  bootstrap:
+    admin:
+      email: ""
+      password: ""
+webauthn:
+  rp-id: localhost
+  allowed-origins: http://localhost:5180
+vendor:
+  enabled: true
+  demo: true
+  management-approved: false
+  gateway-key: local-vendor-gateway-demo-only-2026
+  encryption-key: dmVuZG9yLWRlbW8ta2V5LTIwMjYtbG9jYWwtb25seSE=
+  registration-pages: '{"HOLDINGS":"http://localhost:3110/vendors/register","ENERGY":"http://localhost:3110/vendors/energy/register","MEDIA":"http://localhost:3110/vendors/media/register","SERVICES":"http://localhost:3110/vendors/services/register","DISTRIBUTION":"http://localhost:3110/vendors/distribution/register"}'
+  mail:
+    enabled: false
+    live-approved: false

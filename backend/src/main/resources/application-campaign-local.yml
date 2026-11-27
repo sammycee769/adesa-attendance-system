@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:55441/adesa_campaign_demo
+    username: campaign_local
+    password: campaign_demo_only
+server:
+  address: 127.0.0.1
+  port: 8087
+  servlet:
+    session:
+      cookie:
+        secure: false
+adesa:
+  account:
+    public-url: http://localhost:5177
+  mail:
+    provider: smtp
+    host: ""
+    username: ""
+    password: ""
+  assets:
+    mail:
+      enabled: false
+  payments:
+    transport: mock
+    live-approved: false
+  bootstrap:
+    admin:
+      email: ""
+      password: ""
+webauthn:
+  rp-id: localhost
+  allowed-origins: http://localhost:5177
+campaign:
+  enabled: true
+  gateway-key: local-campaign-gateway-demo-only-2026
+  mail:
+    enabled: false
+    live-approved: false

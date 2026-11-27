@@ -13,3 +13,9 @@ backend/target/
 frontend/dist/
 frontend/node_modules/
 frontend/tsconfig.tsbuildinfo
+
+# Isolated event campaign demo database, logs and synthetic sessions
+.campaign-demo/
+
+# Private vendor presentation data, database, staged source and logs
+.vendor-demo/

@@ -16,7 +16,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const menuButton = useRef<HTMLButtonElement>(null);
 
   const [mediaAccessFor, setMediaAccessFor] = useState<string | null>(null);
+  const [campaignAccessFor, setCampaignAccessFor] = useState<string | null>(null);
   const userId = user?.id;
+  useEffect(() => {
+    if (!userId || user?.mustChangePassword) return;
+    const controller = new AbortController();
+    void apiRequest<{ view: boolean }>('/api/v1/campaign/staff/access', { signal: controller.signal })
+      .then(access => { if (!controller.signal.aborted) setCampaignAccessFor(access.view ? userId : null); })
+      .catch(() => { if (!controller.signal.aborted) setCampaignAccessFor(null); });
+    return () => controller.abort();
+  }, [userId, user?.mustChangePassword]);
   useEffect(() => {
     if (!userId || user?.mustChangePassword) return;
     const controller = new AbortController();
@@ -73,6 +82,8 @@ export function Layout({ children }: { children: ReactNode }) {
               <NavLink to="/recurring-payments">Recurring Payments</NavLink>
               {userId && !user?.mustChangePassword && mediaAccessFor === userId
                 ? <NavLink to="/media/boards">Media Boards</NavLink> : null}
+              {userId && !user?.mustChangePassword && campaignAccessFor === userId ? <NavLink to="/events-leads">Events &amp; Lead Management</NavLink> : null}
+              {user?.role === 'ADMIN' ? <NavLink to="/vendors">Vendor Management</NavLink> : null}
               <NavLink to="/assets">IT Asset Management</NavLink>
               {user && (user.role === 'ADMIN' || user.role === 'HR') ? (
                 <>

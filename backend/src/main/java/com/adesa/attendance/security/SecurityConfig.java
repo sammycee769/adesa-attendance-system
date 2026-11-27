@@ -83,6 +83,7 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf
+                        .ignoringRequestMatchers("/api/v1/campaign/public/**", "/api/v1/vendor/public/**")
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
                 .headers(headers -> headers
@@ -107,6 +108,8 @@ public class SecurityConfig {
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/campaign/public/**", "/api/v1/vendor/public/**").permitAll()
+                        .requestMatchers("/api/v1/vendor/admin/**").hasRole("ADMIN")
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/health/**",
