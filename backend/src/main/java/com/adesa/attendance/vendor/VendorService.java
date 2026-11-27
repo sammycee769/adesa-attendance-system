@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;import com.fasterxml.jackson.
 import java.time.*;import java.util.*;import java.nio.charset.StandardCharsets;
 import org.springframework.beans.factory.annotation.Value;import org.springframework.jdbc.core.JdbcTemplate;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;import org.springframework.web.server.ResponseStatusException;import org.springframework.http.HttpStatus;
 
-@Service @Transactional
+@Service
 public class VendorService {
  private final JdbcTemplate db;private final ObjectMapper json;private final VendorCrypto crypto;private final boolean enabled,demo;private final Map<String,String> pages;private final String staffUrl;
+ @org.springframework.beans.factory.annotation.Autowired
+ public VendorService(VendorTransactions transactions,ObjectMapper json,VendorCrypto crypto,@Value("${vendor.enabled:false}")boolean enabled,@Value("${vendor.demo:false}")boolean demo,@Value("${vendor.registration-pages:}")String configured,@Value("${adesa.account.public-url:http://localhost:5180}")String staffUrl){this(transactions.jdbc(),json,crypto,enabled,demo,configured,staffUrl);}
  public VendorService(JdbcTemplate db,ObjectMapper json,VendorCrypto crypto,@Value("${vendor.enabled:false}")boolean enabled,@Value("${vendor.demo:false}")boolean demo,@Value("${vendor.registration-pages:}")String configured,@Value("${adesa.account.public-url:http://localhost:5180}")String staffUrl){this.db=db;this.json=json;this.crypto=crypto;this.enabled=enabled;this.demo=demo;this.staffUrl=staffUrl;try{pages=configured.isBlank()?Map.of("HOLDINGS","https://adesahq.com/vendors/register","ENERGY","https://adesaenergy.com/vendors/register","MEDIA","https://adesamedia.com/vendors/register","SERVICES","https://adesahq.com/vendors/services/register","DISTRIBUTION","https://adesahq.com/vendors/distribution/register"):json.readValue(configured,new TypeReference<Map<String,String>>(){});for(String code:SITES){String page=pages.getOrDefault(code,"");check(page.matches("https://[^\\s#?]+")||demo&&page.matches("http://(localhost|127\\.0\\.0\\.1):[0-9]+/[^\\s#?]+"),"Configure verified HTTPS vendor registration pages.");}}catch(Exception e){throw new IllegalStateException("Invalid vendor registration page configuration");}}
  public JdbcTemplate jdbc(){return db;}
  public VendorCrypto crypt(){return crypto;}

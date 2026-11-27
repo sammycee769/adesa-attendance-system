@@ -3,7 +3,7 @@ import static com.adesa.attendance.vendor.VendorRules.*;
 import java.util.*;import java.time.*;import java.nio.charset.StandardCharsets;
 import com.adesa.attendance.security.AuthenticatedEmployee;import com.adesa.attendance.employee.EmployeeRole;
 import org.springframework.security.core.context.SecurityContextHolder;import org.springframework.http.HttpStatus;import org.springframework.web.server.ResponseStatusException;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
-@Service @Transactional
+@Service
 public class VendorAdmin {
  private final VendorService s;
  public VendorAdmin(VendorService s){this.s=s;}
